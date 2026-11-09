@@ -1,6 +1,7 @@
 {
   "hosting": {
-    "public": "misgalletas",
+    "site": "misgalletas",
+    "public": "dist",
     "ignore": [
       "firebase.json",
       "**/.*",
