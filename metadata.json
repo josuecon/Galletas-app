@@ -1,0 +1,6 @@
+{
+  "name": "Mi Negocio de Galletas",
+  "description": "Aplicación personal para administrar gastos, producción de tandas, ventas, cuentas por cobrar y por pagar de un pequeño negocio de galletas.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

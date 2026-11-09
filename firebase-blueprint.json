@@ -1,0 +1,131 @@
+{
+  "entities": {
+    "expense": {
+      "title": "Expense",
+      "description": "Gasto u inversión registrada por el usuario",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "description": { "type": "string", "maxLength": 200 },
+        "category": { "type": "string", "maxLength": 50 },
+        "type": { "type": "string", "enum": ["insumo", "operativo"] },
+        "amount": { "type": "number" },
+        "currency": { "type": "string", "enum": ["USD", "VES"] },
+        "date": { "type": "string", "maxLength": 10 },
+        "status": { "type": "string", "enum": ["pagado", "pendiente"] },
+        "observation": { "type": "string", "maxLength": 500 },
+        "linkedPayableId": { "type": "string", "maxLength": 128 },
+        "createdAt": { "type": "string", "maxLength": 50 }
+      },
+      "required": ["userId", "description", "category", "type", "amount", "currency", "date", "status"]
+    },
+    "batch": {
+      "title": "Batch",
+      "description": "Tanda de producción de galletas",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "name": { "type": "string", "maxLength": 150 },
+        "date": { "type": "string", "maxLength": 10 },
+        "quantityProduced": { "type": "number" },
+        "quantitySold": { "type": "number" },
+        "totalCost": { "type": "number" },
+        "unitCost": { "type": "number" },
+        "currency": { "type": "string", "enum": ["USD", "VES"] },
+        "observations": { "type": "string", "maxLength": 500 },
+        "createdAt": { "type": "string", "maxLength": 50 }
+      },
+      "required": ["userId", "name", "date", "quantityProduced", "quantitySold", "totalCost", "unitCost", "currency"]
+    },
+    "sale": {
+      "title": "Sale",
+      "description": "Venta de galletas por unidad o por paquetes",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "date": { "type": "string", "maxLength": 10 },
+        "batchId": { "type": "string", "maxLength": 128 },
+        "batchName": { "type": "string", "maxLength": 150 },
+        "modality": { "type": "string", "enum": ["unit", "pack"] },
+        "quantity": { "type": "number" },
+        "unitsPerPack": { "type": "number" },
+        "totalUnits": { "type": "number" },
+        "salePrice": { "type": "number" },
+        "currency": { "type": "string", "enum": ["USD", "VES"] },
+        "totalAmount": { "type": "number" },
+        "paymentStatus": { "type": "string", "enum": ["pagada", "pendiente", "parcial"] },
+        "amountPaid": { "type": "number" },
+        "customerName": { "type": "string", "maxLength": 150 },
+        "linkedReceivableId": { "type": "string", "maxLength": 128 },
+        "createdAt": { "type": "string", "maxLength": 50 }
+      },
+      "required": ["userId", "date", "batchId", "modality", "quantity", "unitsPerPack", "totalUnits", "salePrice", "currency", "totalAmount", "paymentStatus", "amountPaid"]
+    },
+    "receivable": {
+      "title": "Receivable",
+      "description": "Cuenta por cobrar del negocio",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "customerName": { "type": "string", "maxLength": 150 },
+        "concept": { "type": "string", "maxLength": 200 },
+        "totalAmount": { "type": "number" },
+        "currency": { "type": "string", "enum": ["USD", "VES"] },
+        "date": { "type": "string", "maxLength": 10 },
+        "dueDate": { "type": "string", "maxLength": 10 },
+        "installments": { "type": "string" },
+        "totalPaid": { "type": "number" },
+        "pendingBalance": { "type": "number" },
+        "status": { "type": "string", "enum": ["pendiente", "parcial", "pagada"] },
+        "linkedSaleId": { "type": "string", "maxLength": 128 },
+        "createdAt": { "type": "string", "maxLength": 50 }
+      },
+      "required": ["userId", "customerName", "concept", "totalAmount", "currency", "date", "totalPaid", "pendingBalance", "status"]
+    },
+    "payable": {
+      "title": "Payable",
+      "description": "Cuenta por pagar del negocio",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "supplierName": { "type": "string", "maxLength": 150 },
+        "concept": { "type": "string", "maxLength": 200 },
+        "totalAmount": { "type": "number" },
+        "currency": { "type": "string", "enum": ["USD", "VES"] },
+        "date": { "type": "string", "maxLength": 10 },
+        "dueDate": { "type": "string", "maxLength": 10 },
+        "installments": { "type": "string" },
+        "totalPaid": { "type": "number" },
+        "pendingBalance": { "type": "number" },
+        "status": { "type": "string", "enum": ["pendiente", "parcial", "pagada"] },
+        "expenseCategory": { "type": "string", "maxLength": 50 },
+        "expenseType": { "type": "string", "enum": ["insumo", "operativo"] },
+        "linkedExpenseId": { "type": "string", "maxLength": 128 },
+        "createdAt": { "type": "string", "maxLength": 50 }
+      },
+      "required": ["userId", "supplierName", "concept", "totalAmount", "currency", "date", "totalPaid", "pendingBalance", "status"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}/expenses/{expenseId}": {
+      "schema": "expense",
+      "description": "Gastos e inversiones privadas del usuario"
+    },
+    "/users/{userId}/batches/{batchId}": {
+      "schema": "batch",
+      "description": "Tandas de producción privadas del usuario"
+    },
+    "/users/{userId}/sales/{saleId}": {
+      "schema": "sale",
+      "description": "Ventas privadas de galletas del usuario"
+    },
+    "/users/{userId}/receivables/{receivableId}": {
+      "schema": "receivable",
+      "description": "Cuentas por cobrar del usuario"
+    },
+    "/users/{userId}/payables/{payableId}": {
+      "schema": "payable",
+      "description": "Cuentas por pagar del usuario"
+    }
+  }
+}

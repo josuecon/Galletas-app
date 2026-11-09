@@ -1,0 +1,53 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Default deny all access
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Helper functions
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() > 0 && id.size() <= 128;
+    }
+
+    // Private user subcollections
+    match /users/{userId} {
+      allow read, write: if isOwner(userId);
+
+      // Expenses
+      match /expenses/{expenseId} {
+        allow read, write: if isOwner(userId) && isValidId(expenseId);
+      }
+
+      // Production Batches
+      match /batches/{batchId} {
+        allow read, write: if isOwner(userId) && isValidId(batchId);
+      }
+
+      // Sales
+      match /sales/{saleId} {
+        allow read, write: if isOwner(userId) && isValidId(saleId);
+      }
+
+      // Accounts Receivable
+      match /receivables/{receivableId} {
+        allow read, write: if isOwner(userId) && isValidId(receivableId);
+      }
+
+      // Accounts Payable
+      match /payables/{payableId} {
+        allow read, write: if isOwner(userId) && isValidId(payableId);
+      }
+    }
+  }
+}
