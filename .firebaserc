@@ -1,5 +1,14 @@
 {
   "projects": {
     "default": "ildolce-ba7d0"
+  },
+  "targets": {
+    "ildolce-ba7d0": {
+      "hosting": {
+        "misgalletas": [
+          "misgalletas"
+        ]
+      }
+    }
   }
 }
