@@ -21,6 +21,7 @@ import {
   PaymentInstallment,
 } from '../types/index.ts';
 import { handleFirestoreError, OperationType } from '../services/firebase.ts';
+import { sanitizeForFirestore } from '../utils/sanitize.ts';
 
 interface DataContextType {
   expenses: Expense[];
@@ -274,7 +275,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           linkedExpenseId: id,
           createdAt: new Date().toISOString(),
         };
-        await setDoc(doc(dbInstance, `users/${user.uid}/payables`, payableId), newPayable);
+        await setDoc(doc(dbInstance, `users/${user.uid}/payables`, payableId), sanitizeForFirestore(newPayable));
       }
 
       const newExpense: Expense = {
@@ -284,7 +285,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         linkedPayableId,
         createdAt: new Date().toISOString(),
       };
-      await setDoc(doc(dbInstance, path, id), newExpense);
+      await setDoc(doc(dbInstance, path, id), sanitizeForFirestore(newExpense));
       return id;
     } catch (err) {
       handleFirestoreError(err, OperationType.WRITE, path);
@@ -295,7 +296,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (!user || !dbInstance) throw new Error('No autenticado');
     const path = `users/${user.uid}/expenses`;
     try {
-      await updateDoc(doc(dbInstance, path, id), updates);
+      const cleanUpdates = sanitizeForFirestore(updates);
+      await updateDoc(doc(dbInstance, path, id), cleanUpdates);
     } catch (err) {
       handleFirestoreError(err, OperationType.UPDATE, path);
     }
@@ -340,7 +342,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         unitCost,
         createdAt: new Date().toISOString(),
       };
-      await setDoc(doc(dbInstance, path, id), newBatch);
+      await setDoc(doc(dbInstance, path, id), sanitizeForFirestore(newBatch));
       return id;
     } catch (err) {
       handleFirestoreError(err, OperationType.WRITE, path);
@@ -358,10 +360,12 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const totalCost = updates.totalCost ?? current.totalCost;
       const unitCost = Math.round((totalCost / quantityProduced) * 10000) / 10000;
 
-      await updateDoc(doc(dbInstance, path, id), {
+      const cleanUpdates = sanitizeForFirestore({
         ...updates,
         unitCost,
       });
+
+      await updateDoc(doc(dbInstance, path, id), cleanUpdates);
     } catch (err) {
       handleFirestoreError(err, OperationType.UPDATE, path);
     }
@@ -441,7 +445,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
             linkedSaleId: saleId,
             createdAt: new Date().toISOString(),
           };
-          await setDoc(doc(dbInstance, `users/${user.uid}/receivables`, recId), newReceivable);
+          await setDoc(doc(dbInstance, `users/${user.uid}/receivables`, recId), sanitizeForFirestore(newReceivable));
         }
       }
 
@@ -458,7 +462,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       };
 
       // 1. Save sale
-      await setDoc(doc(dbInstance, salesPath, saleId), newSale);
+      await setDoc(doc(dbInstance, salesPath, saleId), sanitizeForFirestore(newSale));
 
       // 2. Update batch quantity sold
       const newQuantitySold = batch.quantitySold + totalUnits;
@@ -503,10 +507,12 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         });
       }
 
-      await updateDoc(doc(dbInstance, salesPath, id), {
+      const cleanUpdates = sanitizeForFirestore({
         ...updates,
         totalUnits: newTotalUnits,
       });
+
+      await updateDoc(doc(dbInstance, salesPath, id), cleanUpdates);
     } catch (err) {
       handleFirestoreError(err, OperationType.UPDATE, salesPath);
     }
@@ -560,7 +566,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         status: 'pendiente',
         createdAt: new Date().toISOString(),
       };
-      await setDoc(doc(dbInstance, path, id), newRec);
+      await setDoc(doc(dbInstance, path, id), sanitizeForFirestore(newRec));
       return id;
     } catch (err) {
       handleFirestoreError(err, OperationType.WRITE, path);
@@ -587,17 +593,20 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         id: 'inst_' + Date.now(),
       };
 
-      const updatedInstallments = [...(rec.installments || []), installmentItem];
+      const cleanInstallmentItem = sanitizeForFirestore(installmentItem);
+      const updatedInstallments = [...(rec.installments || []), cleanInstallmentItem];
       const newTotalPaid = Math.round((rec.totalPaid + inst.amount) * 100) / 100;
       const newPendingBalance = Math.max(0, Math.round((rec.totalAmount - newTotalPaid) * 100) / 100);
       const newStatus = newPendingBalance <= 0.001 ? 'pagada' : 'parcial';
 
-      await updateDoc(doc(dbInstance, path, receivableId), {
+      const cleanPayload = sanitizeForFirestore({
         installments: updatedInstallments,
         totalPaid: newTotalPaid,
         pendingBalance: newPendingBalance,
         status: newStatus,
       });
+
+      await updateDoc(doc(dbInstance, path, receivableId), cleanPayload);
     } catch (err) {
       handleFirestoreError(err, OperationType.UPDATE, path);
     }
@@ -631,7 +640,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         status: 'pendiente',
         createdAt: new Date().toISOString(),
       };
-      await setDoc(doc(dbInstance, path, id), newPayable);
+      await setDoc(doc(dbInstance, path, id), sanitizeForFirestore(newPayable));
       return id;
     } catch (err) {
       handleFirestoreError(err, OperationType.WRITE, path);
@@ -658,17 +667,20 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         id: 'inst_p_' + Date.now(),
       };
 
-      const updatedInstallments = [...(pay.installments || []), installmentItem];
+      const cleanInstallmentItem = sanitizeForFirestore(installmentItem);
+      const updatedInstallments = [...(pay.installments || []), cleanInstallmentItem];
       const newTotalPaid = Math.round((pay.totalPaid + inst.amount) * 100) / 100;
       const newPendingBalance = Math.max(0, Math.round((pay.totalAmount - newTotalPaid) * 100) / 100);
       const newStatus = newPendingBalance <= 0.001 ? 'pagada' : 'parcial';
 
-      await updateDoc(doc(dbInstance, path, payableId), {
+      const cleanPayload = sanitizeForFirestore({
         installments: updatedInstallments,
         totalPaid: newTotalPaid,
         pendingBalance: newPendingBalance,
         status: newStatus,
       });
+
+      await updateDoc(doc(dbInstance, path, payableId), cleanPayload);
 
       // If linked to an expense, and fully paid, mark expense status as 'pagado'
       if (pay.linkedExpenseId && newStatus === 'pagada') {
@@ -733,55 +745,55 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       // Import batches first so sales can refer to them
       for (const item of impBatches) {
         const id = item.id || 'batch_' + Date.now() + '_' + Math.random().toString(36).substring(2, 6);
-        await setDoc(doc(dbInstance, `users/${user.uid}/batches`, id), {
+        await setDoc(doc(dbInstance, `users/${user.uid}/batches`, id), sanitizeForFirestore({
           ...item,
           id,
           userId: user.uid,
-        });
+        }));
         importedCount++;
       }
 
       // Import expenses
       for (const item of impExpenses) {
         const id = item.id || 'exp_' + Date.now() + '_' + Math.random().toString(36).substring(2, 6);
-        await setDoc(doc(dbInstance, `users/${user.uid}/expenses`, id), {
+        await setDoc(doc(dbInstance, `users/${user.uid}/expenses`, id), sanitizeForFirestore({
           ...item,
           id,
           userId: user.uid,
-        });
+        }));
         importedCount++;
       }
 
       // Import sales
       for (const item of impSales) {
         const id = item.id || 'sale_' + Date.now() + '_' + Math.random().toString(36).substring(2, 6);
-        await setDoc(doc(dbInstance, `users/${user.uid}/sales`, id), {
+        await setDoc(doc(dbInstance, `users/${user.uid}/sales`, id), sanitizeForFirestore({
           ...item,
           id,
           userId: user.uid,
-        });
+        }));
         importedCount++;
       }
 
       // Import receivables
       for (const item of impReceivables) {
         const id = item.id || 'rec_' + Date.now() + '_' + Math.random().toString(36).substring(2, 6);
-        await setDoc(doc(dbInstance, `users/${user.uid}/receivables`, id), {
+        await setDoc(doc(dbInstance, `users/${user.uid}/receivables`, id), sanitizeForFirestore({
           ...item,
           id,
           userId: user.uid,
-        });
+        }));
         importedCount++;
       }
 
       // Import payables
       for (const item of impPayables) {
         const id = item.id || 'pay_' + Date.now() + '_' + Math.random().toString(36).substring(2, 6);
-        await setDoc(doc(dbInstance, `users/${user.uid}/payables`, id), {
+        await setDoc(doc(dbInstance, `users/${user.uid}/payables`, id), sanitizeForFirestore({
           ...item,
           id,
           userId: user.uid,
-        });
+        }));
         importedCount++;
       }
 
