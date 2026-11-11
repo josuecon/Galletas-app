@@ -8,35 +8,29 @@ import {
   ArrowDownCircle,
   ArrowUpCircle,
   PiggyBank,
-  AlertCircle,
   HelpCircle,
 } from 'lucide-react';
 import { useData } from '../context/DataContext.tsx';
-import { CurrencySummary, Currency } from '../types/index.ts';
 import { formatMoney } from '../utils/formatters.ts';
 
 export const FinancialSummary: React.FC = () => {
-  const { usdSummary, vesSummary, activeCurrency } = useData();
+  const { financialSummary } = useData();
 
-  const renderCurrencyCard = (summary: CurrencySummary, label: string, badgeBg: string) => {
-    const isUSD = summary.currency === 'USD';
-
-    return (
+  return (
+    <section>
       <div className="bg-white rounded-3xl p-6 shadow-sm border border-stone-200/80 mb-6">
-        {/* Header of Currency Panel */}
+        {/* Header of Financial Panel */}
         <div className="flex flex-wrap items-center justify-between gap-3 pb-4 mb-6 border-b border-stone-200">
           <div className="flex items-center gap-3">
-            <span
-              className={`px-3 py-1 rounded-xl font-black text-xs uppercase tracking-wider text-white shadow-xs ${badgeBg}`}
-            >
-              {summary.currency}
+            <span className="px-3 py-1 rounded-xl font-black text-xs uppercase tracking-wider text-white shadow-xs bg-emerald-700">
+              USD ($)
             </span>
             <div>
               <h2 className="text-lg font-black text-stone-900 tracking-tight">
-                Indicadores Financieros ({label})
+                Resumen Financiero Consolidado
               </h2>
               <p className="text-xs text-stone-500 font-medium">
-                Cálculos exactos en {summary.currency}. Nunca mezclados con otra moneda.
+                Indicadores en Dólares Estadounidenses (USD).
               </p>
             </div>
           </div>
@@ -48,16 +42,16 @@ export const FinancialSummary: React.FC = () => {
               </span>
               <p
                 className={`text-xl font-black ${
-                  summary.netProfit >= 0 ? 'text-emerald-700' : 'text-rose-600'
+                  financialSummary.netProfit >= 0 ? 'text-emerald-700' : 'text-rose-600'
                 }`}
               >
-                {formatMoney(summary.netProfit, summary.currency)}
+                {formatMoney(financialSummary.netProfit)}
               </p>
             </div>
           </div>
         </div>
 
-        {/* 8 Financial Metrics Grid */}
+        {/* Financial Metrics Grid */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           {/* 1. Inversiones y compras (insumos) */}
           <div className="p-4 rounded-2xl bg-[#fbf8f2] border border-amber-900/10">
@@ -66,7 +60,7 @@ export const FinancialSummary: React.FC = () => {
               <PiggyBank className="w-4 h-4 text-amber-700" />
             </div>
             <p className="text-lg font-black text-stone-900">
-              {formatMoney(summary.totalInvestments, summary.currency)}
+              {formatMoney(financialSummary.totalInvestments)}
             </p>
             <p className="text-[11px] text-stone-500 mt-1 leading-tight">
               Harina, azúcar, etc. (entraron en tandas)
@@ -80,7 +74,7 @@ export const FinancialSummary: React.FC = () => {
               <ArrowDownCircle className="w-4 h-4 text-rose-600" />
             </div>
             <p className="text-lg font-black text-stone-900">
-              {formatMoney(summary.totalOperatingExpenses, summary.currency)}
+              {formatMoney(financialSummary.totalOperatingExpenses)}
             </p>
             <p className="text-[11px] text-stone-500 mt-1 leading-tight">
               Transporte, servicios, empaques
@@ -94,7 +88,7 @@ export const FinancialSummary: React.FC = () => {
               <ShoppingBag className="w-4 h-4 text-emerald-700" />
             </div>
             <p className="text-lg font-black text-stone-900">
-              {formatMoney(summary.totalSales, summary.currency)}
+              {formatMoney(financialSummary.totalSales)}
             </p>
             <p className="text-[11px] text-stone-500 mt-1 leading-tight">
               Facturación bruta de ventas
@@ -108,7 +102,7 @@ export const FinancialSummary: React.FC = () => {
               <ArrowUpCircle className="w-4 h-4 text-emerald-700" />
             </div>
             <p className="text-lg font-black text-emerald-800">
-              {formatMoney(summary.totalCollected, summary.currency)}
+              {formatMoney(financialSummary.totalCollected)}
             </p>
             <p className="text-[11px] text-emerald-700 mt-1 leading-tight">
               Ventas de contado + abonos cobrados
@@ -122,7 +116,7 @@ export const FinancialSummary: React.FC = () => {
               <Clock className="w-4 h-4 text-amber-700" />
             </div>
             <p className="text-lg font-black text-amber-900">
-              {formatMoney(summary.totalPendingReceivable, summary.currency)}
+              {formatMoney(financialSummary.totalPendingReceivable)}
             </p>
             <p className="text-[11px] text-amber-700 mt-1 leading-tight">
               Dinero en la calle pendiente de clientes
@@ -136,7 +130,7 @@ export const FinancialSummary: React.FC = () => {
               <CreditCard className="w-4 h-4 text-rose-700" />
             </div>
             <p className="text-lg font-black text-rose-900">
-              {formatMoney(summary.totalPendingPayable, summary.currency)}
+              {formatMoney(financialSummary.totalPendingPayable)}
             </p>
             <p className="text-[11px] text-rose-700 mt-1 leading-tight">
               Saldos pendientes con proveedores
@@ -150,17 +144,17 @@ export const FinancialSummary: React.FC = () => {
               <TrendingUp className="w-4 h-4 text-[#143d2b]" />
             </div>
             <p className="text-lg font-black text-stone-900">
-              {formatMoney(summary.grossProfit, summary.currency)}
+              {formatMoney(financialSummary.grossProfit)}
             </p>
             <p className="text-[11px] text-stone-500 mt-1 leading-tight">
-              Ventas - Costo de tandas vendidas ({formatMoney(summary.productionCostSold, summary.currency)})
+              Ventas - Costo de tandas vendidas ({formatMoney(financialSummary.productionCostSold)})
             </p>
           </div>
 
           {/* 8. Ganancia Neta */}
           <div
             className={`p-4 rounded-2xl border ${
-              summary.netProfit >= 0
+              financialSummary.netProfit >= 0
                 ? 'bg-[#143d2b] text-white border-emerald-950'
                 : 'bg-rose-900 text-white border-rose-950'
             }`}
@@ -170,7 +164,7 @@ export const FinancialSummary: React.FC = () => {
               <DollarSign className="w-4 h-4 text-white" />
             </div>
             <p className="text-xl font-black text-white">
-              {formatMoney(summary.netProfit, summary.currency)}
+              {formatMoney(financialSummary.netProfit)}
             </p>
             <p className="text-[11px] text-emerald-100/80 mt-1 leading-tight">
               Ganancia bruta - Gastos operativos
@@ -186,16 +180,6 @@ export const FinancialSummary: React.FC = () => {
           </span>
         </div>
       </div>
-    );
-  };
-
-  return (
-    <section>
-      {(activeCurrency === 'ALL' || activeCurrency === 'USD') &&
-        renderCurrencyCard(usdSummary, 'Dólares Estadounidenses', 'bg-emerald-700')}
-
-      {(activeCurrency === 'ALL' || activeCurrency === 'VES') &&
-        renderCurrencyCard(vesSummary, 'Bolívares Digitales', 'bg-amber-600')}
     </section>
   );
 };

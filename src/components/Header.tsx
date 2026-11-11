@@ -12,7 +12,6 @@ import {
   Sparkles,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext.tsx';
-import { useData } from '../context/DataContext.tsx';
 import { FirebaseSetupModal } from './FirebaseSetupModal.tsx';
 import { BackupModal } from './BackupModal.tsx';
 
@@ -22,7 +21,6 @@ interface Props {
 
 export const Header: React.FC<Props> = () => {
   const { user, isConfigured, login, logout, loading, error: authError } = useAuth();
-  const { activeCurrency, setActiveCurrency } = useData();
   const [showSetupModal, setShowSetupModal] = useState(false);
   const [showBackupModal, setShowBackupModal] = useState(false);
 
@@ -50,44 +48,8 @@ export const Header: React.FC<Props> = () => {
             </div>
           </div>
 
-          {/* Right actions: Currencies, Firebase status, Backup, Auth */}
+          {/* Right actions: Firebase status, Backup, Auth */}
           <div className="flex items-center gap-2 sm:gap-3">
-            {/* Currency Filter Switcher */}
-            <div className="bg-emerald-950/70 p-1 rounded-xl flex items-center border border-emerald-800/60 text-xs">
-              <button
-                type="button"
-                onClick={() => setActiveCurrency('ALL')}
-                className={`px-2.5 py-1 rounded-lg font-bold transition cursor-pointer ${
-                  activeCurrency === 'ALL'
-                    ? 'bg-[#ede3d1] text-[#143d2b] shadow-xs'
-                    : 'text-emerald-200 hover:text-white'
-                }`}
-              >
-                Todas
-              </button>
-              <button
-                type="button"
-                onClick={() => setActiveCurrency('USD')}
-                className={`px-2.5 py-1 rounded-lg font-bold transition cursor-pointer ${
-                  activeCurrency === 'USD'
-                    ? 'bg-emerald-500 text-white shadow-xs'
-                    : 'text-emerald-200 hover:text-white'
-                }`}
-              >
-                USD ($)
-              </button>
-              <button
-                type="button"
-                onClick={() => setActiveCurrency('VES')}
-                className={`px-2.5 py-1 rounded-lg font-bold transition cursor-pointer ${
-                  activeCurrency === 'VES'
-                    ? 'bg-amber-600 text-white shadow-xs'
-                    : 'text-emerald-200 hover:text-white'
-                }`}
-              >
-                VES (Bs)
-              </button>
-            </div>
 
             {/* Backup Button */}
             <button

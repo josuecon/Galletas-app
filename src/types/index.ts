@@ -1,5 +1,3 @@
-export type Currency = 'USD' | 'VES';
-
 export type ExpenseCategory =
   | 'Harina'
   | 'Azúcar'
@@ -13,7 +11,92 @@ export type ExpenseCategory =
   | 'Otros';
 
 export type ExpenseType = 'insumo' | 'operativo';
-export type ExpenseStatus = 'pagado' | 'pendiente';
+export type ExpenseStatus = 'pagado' | 'pendiente' | 'anulado';
+
+// Dimensiones y unidades físicas de medida
+export type DimensionType = 'masa' | 'volumen' | 'unidad';
+export type MassUnit = 'g' | 'kg';
+export type VolumeUnit = 'ml' | 'l';
+export type DiscreteUnit = 'unidad';
+export type UnitOfMeasure = MassUnit | VolumeUnit | DiscreteUnit;
+export type BaseUnit = 'g' | 'ml' | 'unidad';
+
+// Tipos de movimientos en el Kárdex
+export type InventoryMovementType =
+  | 'compra'
+  | 'consumo_tanda'
+  | 'regularizacion_tanda'
+  | 'ajuste_sobrante'
+  | 'ajuste_merma'
+  | 'compensacion_edicion'
+  | 'reversion_compra'
+  | 'reversion_tanda';
+
+// Catálogo de ingredientes con existencia física y valoración única en USD
+export interface Ingredient {
+  id: string;
+  userId: string;
+  name: string;
+  category: string;
+  dimension: DimensionType;
+  baseUnit: BaseUnit;
+  physicalStock: number;   // Existencia física única en baseUnit
+  averageCost: number;     // Costo promedio unitario en USD
+  totalValue: number;      // physicalStock * averageCost en USD
+  minStockAlert?: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+// Asiento inmutable en el Kárdex de inventario (en USD)
+export interface InventoryMovement {
+  id: string;
+  userId: string;
+  ingredientId: string;
+  ingredientName: string;
+  type: InventoryMovementType;
+  enteredQuantity: number;
+  enteredUnit: UnitOfMeasure;
+  baseQuantity: number; // Con signo: positivo (entrada), negativo (salida)
+  baseUnit: BaseUnit;
+  unitCost: number;     // Costo unitario en USD
+  totalAmount: number;  // Importe total en USD
+  referenceId?: string; // batchId o expenseId
+  batchRecipeName?: string;
+  notes?: string;
+  sourceType?: 'compra' | 'cpp_actual';
+  referenceExpenseId?: string;
+  date: string; // YYYY-MM-DD
+  createdAt: string;
+}
+
+// Desglose de consumo por ingrediente en una tanda (en USD)
+export interface BatchIngredientUsage {
+  ingredientId: string;
+  ingredientName: string;
+  requiredQuantity: number;
+  requiredUnit: UnitOfMeasure;
+  requiredBaseQty: number;
+  physicallyCoveredBaseQty: number; // Cantidad física descontada del almacén
+  valuedBaseQty: number;            // Cantidad con costo económico reconocido
+  uncoveredBaseQty: number;         // Cantidad con costo pendiente de valorizar
+  coveredCost: number;              // Costo monetario cubierto acumulado en USD
+  unitCostAtBatch: number;          // Costo unitario promedio en baseUnit al momento del consumo en USD
+  isFullyCovered: boolean;
+  sourceType?: 'compra' | 'cpp_actual';
+  referenceExpenseId?: string;
+  referenceMovementId?: string;
+}
+
+// Costos directos de tanda (gas, empaques, mano de obra puntual en USD)
+export interface BatchDirectCost {
+  id: string;
+  description: string;
+  amount: number;
+}
+
+export type BatchCostStatus = 'definitivo' | 'provisional';
+export type BatchStockStatus = 'completo' | 'stock_incompleto';
 
 export interface Expense {
   id: string;
@@ -21,13 +104,23 @@ export interface Expense {
   description: string;
   category: ExpenseCategory;
   type: ExpenseType; // 'insumo' no descuenta de ganancia si entra al costo de tanda; 'operativo' sí descuenta
-  amount: number;
-  currency: Currency;
-  date: string; // YYYY-MM-DD
+  amount: number;    // Monto en USD
+  date: string;      // YYYY-MM-DD
   status: ExpenseStatus;
   observation?: string;
   linkedPayableId?: string;
   createdAt: string;
+
+  // Campos de inventario (opcionales para compatibilidad)
+  ingredientId?: string;
+  ingredientName?: string;
+  purchaseQuantity?: number;
+  purchaseUnit?: UnitOfMeasure;
+  inventoryMovementId?: string;
+  isReversed?: boolean;
+  reversalReason?: string;
+  reversalDate?: string;
+  updatedAt?: string;
 }
 
 export interface Batch {
@@ -36,12 +129,22 @@ export interface Batch {
   name: string; // Ej: "Galletas Chispas de Chocolate"
   date: string; // YYYY-MM-DD
   quantityProduced: number; // Unidades producidas
-  quantitySold: number; // Unidades vendidas
-  totalCost: number; // Costo total de producción introducido manualmente
-  unitCost: number; // totalCost / quantityProduced
-  currency: Currency;
+  quantitySold: number;     // Unidades vendidas
+  totalCost: number;        // Costo total de producción en USD
+  unitCost: number;         // totalCost / quantityProduced en USD
   observations?: string;
   createdAt: string;
+
+  // Campos de inventario y recetas
+  recipeName?: string;
+  ingredientsUsed?: BatchIngredientUsage[];
+  otherDirectCosts?: BatchDirectCost[];
+  otherDirectCostsAmount?: number;
+  coveredIngredientsCost?: number;
+  costStatus?: BatchCostStatus;
+  stockStatus?: BatchStockStatus;
+  isManualCost?: boolean;
+  updatedAt?: string;
 }
 
 export type SaleModality = 'unit' | 'pack';
@@ -57,11 +160,10 @@ export interface Sale {
   quantity: number; // Cantidad de unidades o paquetes
   unitsPerPack: number; // 1 si es por unidad, >1 si es paquete
   totalUnits: number; // Cantidad total de galletas deducidas
-  salePrice: number; // Precio unitario o precio por paquete
-  currency: Currency;
-  totalAmount: number; // Total venta calculado
+  salePrice: number;  // Precio unitario o paquete en USD
+  totalAmount: number; // Total venta calculado en USD
   paymentStatus: PaymentStatus;
-  amountPaid: number; // Dinero efectivamente recibido en la venta
+  amountPaid: number;  // Dinero efectivamente recibido en USD
   customerName?: string;
   linkedReceivableId?: string;
   createdAt: string;
@@ -70,7 +172,7 @@ export interface Sale {
 export interface PaymentInstallment {
   id: string;
   date: string;
-  amount: number;
+  amount: number; // Monto en USD
   notes?: string;
 }
 
@@ -81,13 +183,12 @@ export interface Receivable {
   userId: string;
   customerName: string;
   concept: string;
-  totalAmount: number;
-  currency: Currency;
+  totalAmount: number; // En USD
   date: string;
   dueDate?: string;
   installments: PaymentInstallment[];
-  totalPaid: number; // Suma de abonos
-  pendingBalance: number; // totalAmount - totalPaid
+  totalPaid: number;       // Suma de abonos en USD
+  pendingBalance: number;  // totalAmount - totalPaid en USD
   status: DebtStatus;
   linkedSaleId?: string;
   createdAt: string;
@@ -98,13 +199,12 @@ export interface Payable {
   userId: string;
   supplierName: string;
   concept: string;
-  totalAmount: number;
-  currency: Currency;
+  totalAmount: number; // En USD
   date: string;
   dueDate?: string;
   installments: PaymentInstallment[];
-  totalPaid: number;
-  pendingBalance: number;
+  totalPaid: number;       // Suma de abonos en USD
+  pendingBalance: number;  // totalAmount - totalPaid en USD
   status: DebtStatus;
   expenseCategory?: ExpenseCategory;
   expenseType?: ExpenseType;
@@ -112,17 +212,16 @@ export interface Payable {
   createdAt: string;
 }
 
-export interface CurrencySummary {
-  currency: Currency;
-  totalInvestments: number; // Compras e insumos registrados
-  totalOperatingExpenses: number; // Gastos operativos
-  totalSales: number; // Ventas brutas totales
-  totalCollected: number; // Dinero efectivamente cobrado (ventas al contado + abonos cobrados)
-  totalPendingReceivable: number; // Dinero pendiente por cobrar
-  totalPendingPayable: number; // Dinero pendiente por pagar
-  productionCostSold: number; // Costo de tandas de las galletas vendidas
-  grossProfit: number; // totalSales - productionCostSold
-  netProfit: number; // grossProfit - totalOperatingExpenses
+export interface FinancialSummary {
+  totalInvestments: number;       // Compras e insumos registrados en USD
+  totalOperatingExpenses: number; // Gastos operativos en USD
+  totalSales: number;             // Ventas brutas totales en USD
+  totalCollected: number;         // Dinero cobrado en USD
+  totalPendingReceivable: number; // Dinero pendiente por cobrar en USD
+  totalPendingPayable: number;    // Dinero pendiente por pagar en USD
+  productionCostSold: number;     // Costo de tandas de las galletas vendidas en USD
+  grossProfit: number;            // totalSales - productionCostSold en USD
+  netProfit: number;              // grossProfit - totalOperatingExpenses en USD
 }
 
 export interface AppBackup {
@@ -136,6 +235,8 @@ export interface AppBackup {
     sales: Sale[];
     receivables: Receivable[];
     payables: Payable[];
+    ingredients?: Ingredient[];
+    inventoryMovements?: InventoryMovement[];
   };
 }
 

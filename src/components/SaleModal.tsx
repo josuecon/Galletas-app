@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { X, Check, ShoppingCart, Calculator, AlertTriangle, AlertCircle } from 'lucide-react';
 import { useData } from '../context/DataContext.tsx';
-import { SaleModality, PaymentStatus, Batch, Currency } from '../types/index.ts';
+import { SaleModality, PaymentStatus, Batch } from '../types/index.ts';
 import { getTodayDateString, formatMoney } from '../utils/formatters.ts';
 
 interface Props {
@@ -10,7 +10,7 @@ interface Props {
 }
 
 export const SaleModal: React.FC<Props> = ({ isOpen, onClose }) => {
-  const { batches, addSale, activeCurrency } = useData();
+  const { batches, addSale } = useData();
 
   const [date, setDate] = useState(getTodayDateString());
   const [selectedBatchId, setSelectedBatchId] = useState<string>('');
@@ -27,9 +27,6 @@ export const SaleModal: React.FC<Props> = ({ isOpen, onClose }) => {
   // Filter available batches
   const availableBatches = batches.filter((b) => {
     const available = b.quantityProduced - b.quantitySold;
-    if (activeCurrency !== 'ALL' && b.currency !== activeCurrency) {
-      return false;
-    }
     return available > 0;
   });
 
@@ -52,7 +49,6 @@ export const SaleModal: React.FC<Props> = ({ isOpen, onClose }) => {
   const totalUnitsToDeduct = modality === 'pack' ? qty * upp : qty;
   const price = parseFloat(salePrice) || 0;
   const totalSaleAmount = Math.round(qty * price * 100) / 100;
-  const currency: Currency = currentBatch ? currentBatch.currency : 'USD';
 
   const isExceedingStock = totalUnitsToDeduct > availableUnitsInBatch;
 
@@ -115,7 +111,6 @@ export const SaleModal: React.FC<Props> = ({ isOpen, onClose }) => {
         quantity: qty,
         unitsPerPack: upp,
         salePrice: price,
-        currency,
         paymentStatus,
         amountPaid: parsedAmountPaid,
         customerName: customerName.trim() || undefined,
@@ -198,7 +193,7 @@ export const SaleModal: React.FC<Props> = ({ isOpen, onClose }) => {
                     const avail = b.quantityProduced - b.quantitySold;
                     return (
                       <option key={b.id} value={b.id}>
-                        {b.name} ({avail} disp. - {b.currency})
+                        {b.name} ({avail} disp.)
                       </option>
                     );
                   })}
@@ -215,9 +210,9 @@ export const SaleModal: React.FC<Props> = ({ isOpen, onClose }) => {
                 <strong className="text-stone-900 text-sm">{availableUnitsInBatch} galletas</strong>
               </div>
               <div className="text-right">
-                <span className="text-stone-500">Moneda obligatoria:</span>{' '}
+                <span className="text-stone-500">Costo unitario tanda:</span>{' '}
                 <span className="px-2 py-0.5 rounded-md font-black bg-stone-100 text-stone-800">
-                  {currentBatch.currency}
+                  {formatMoney(currentBatch.unitCost)}
                 </span>
               </div>
             </div>
@@ -345,12 +340,12 @@ export const SaleModal: React.FC<Props> = ({ isOpen, onClose }) => {
                 Total de la Venta
               </span>
               <p className="text-xs text-emerald-200/80">
-                {qty} {modality === 'pack' ? 'paquetes' : 'galletas'} × {formatMoney(price, currency)}
+                {qty} {modality === 'pack' ? 'paquetes' : 'galletas'} × {formatMoney(price)}
               </p>
             </div>
             <div className="text-right">
               <span className="text-2xl font-black text-white">
-                {formatMoney(totalSaleAmount, currency)}
+                {formatMoney(totalSaleAmount)}
               </span>
             </div>
           </div>
@@ -400,7 +395,7 @@ export const SaleModal: React.FC<Props> = ({ isOpen, onClose }) => {
             {paymentStatus === 'parcial' && (
               <div>
                 <label className="block text-xs font-bold text-stone-700 uppercase tracking-wider mb-1">
-                  Monto Recibido de Inmediato ({currency}) <span className="text-red-500">*</span>
+                  Monto Recibido de Inmediato (USD $) <span className="text-red-500">*</span>
                 </label>
                 <input
                   type="number"
@@ -413,7 +408,7 @@ export const SaleModal: React.FC<Props> = ({ isOpen, onClose }) => {
                   className="w-full p-2.5 bg-white rounded-xl border border-stone-300 text-stone-900 text-sm font-bold focus:ring-2 focus:ring-[#143d2b]"
                 />
                 <p className="text-[11px] text-amber-700 mt-1">
-                  El resto ({formatMoney(Math.max(0, totalSaleAmount - (parseFloat(amountPaid) || 0)), currency)}) generará automáticamente una Cuenta por Cobrar.
+                  El resto ({formatMoney(Math.max(0, totalSaleAmount - (parseFloat(amountPaid) || 0)))}) generará automáticamente una Cuenta por Cobrar.
                 </p>
               </div>
             )}

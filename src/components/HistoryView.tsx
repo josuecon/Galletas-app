@@ -14,7 +14,7 @@ import {
   AlertCircle,
 } from 'lucide-react';
 import { useData } from '../context/DataContext.tsx';
-import { Currency, Batch, Expense, Sale, Receivable, Payable } from '../types/index.ts';
+import { Batch, Expense, Sale, Receivable, Payable } from '../types/index.ts';
 import { formatMoney, formatDate } from '../utils/formatters.ts';
 import { ConfirmModal } from './ConfirmModal.tsx';
 import { BatchModal } from './BatchModal.tsx';
@@ -30,7 +30,6 @@ interface UnifiedMovement {
   subtitle: string;
   date: string;
   amount?: number;
-  currency: Currency;
   statusBadge?: string;
   statusColor?: string;
   rawItem: any;
@@ -48,12 +47,10 @@ export const HistoryView: React.FC = () => {
     deleteSale,
     deleteReceivable,
     deletePayable,
-    activeCurrency,
   } = useData();
 
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedType, setSelectedType] = useState<MovementType>('all');
-  const [selectedCurrency, setSelectedCurrency] = useState<Currency | 'all'>('all');
   const [dateRange, setDateRange] = useState<DateRangeOption>('all');
   const [customStartDate, setCustomStartDate] = useState('');
   const [customEndDate, setCustomEndDate] = useState('');
@@ -83,7 +80,6 @@ export const HistoryView: React.FC = () => {
         subtitle: s.customerName ? `Cliente: ${s.customerName}` : 'Venta directa',
         date: s.date,
         amount: s.totalAmount,
-        currency: s.currency,
         statusBadge:
           s.paymentStatus === 'pagada'
             ? 'Cobrada'
@@ -110,8 +106,7 @@ export const HistoryView: React.FC = () => {
         subtitle: `${b.quantityProduced} galletas producidas (${b.quantityProduced - b.quantitySold} disponibles)`,
         date: b.date,
         amount: b.totalCost,
-        currency: b.currency,
-        statusBadge: `${formatMoney(b.unitCost, b.currency)} / galleta`,
+        statusBadge: `${formatMoney(b.unitCost)} / galleta`,
         statusColor: 'bg-emerald-50 text-emerald-900 border border-emerald-200',
         rawItem: b,
       });
@@ -128,7 +123,6 @@ export const HistoryView: React.FC = () => {
         subtitle: `Categoría: ${e.category} ${e.observation ? `• ${e.observation}` : ''}`,
         date: e.date,
         amount: e.amount,
-        currency: e.currency,
         statusBadge: e.status === 'pagado' ? 'Pagado' : 'Pendiente',
         statusColor:
           e.status === 'pagado'
@@ -145,10 +139,9 @@ export const HistoryView: React.FC = () => {
         sourceType: 'receivable',
         typeLabel: 'Por Cobrar',
         title: `Deuda: ${r.customerName}`,
-        subtitle: `${r.concept} • Pendiente: ${formatMoney(r.pendingBalance, r.currency)}`,
+        subtitle: `${r.concept} • Pendiente: ${formatMoney(r.pendingBalance)}`,
         date: r.date,
         amount: r.totalAmount,
-        currency: r.currency,
         statusBadge:
           r.status === 'pagada' ? 'Cobrada' : r.status === 'parcial' ? 'Parcial' : 'Pendiente',
         statusColor:
@@ -166,10 +159,9 @@ export const HistoryView: React.FC = () => {
         sourceType: 'payable',
         typeLabel: 'Por Pagar',
         title: `Deuda: ${p.supplierName}`,
-        subtitle: `${p.concept} • Pendiente: ${formatMoney(p.pendingBalance, p.currency)}`,
+        subtitle: `${p.concept} • Pendiente: ${formatMoney(p.pendingBalance)}`,
         date: p.date,
         amount: p.totalAmount,
-        currency: p.currency,
         statusBadge:
           p.status === 'pagada' ? 'Pagada' : p.status === 'parcial' ? 'Parcial' : 'Pendiente',
         statusColor:
@@ -191,12 +183,6 @@ export const HistoryView: React.FC = () => {
     const dNow = new Date();
 
     return allMovements.filter((item) => {
-      // Currency filter
-      const curFilter = activeCurrency !== 'ALL' ? activeCurrency : selectedCurrency;
-      if (curFilter !== 'all' && item.currency !== curFilter) {
-        return false;
-      }
-
       // Type filter
       if (selectedType === 'sales' && item.sourceType !== 'sale') return false;
       if (selectedType === 'batches' && item.sourceType !== 'batch') return false;
@@ -234,8 +220,6 @@ export const HistoryView: React.FC = () => {
     });
   }, [
     allMovements,
-    activeCurrency,
-    selectedCurrency,
     selectedType,
     dateRange,
     customStartDate,
@@ -297,7 +281,7 @@ export const HistoryView: React.FC = () => {
         </div>
 
         {/* Filters Bar */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 pt-2 border-t border-stone-100 text-xs">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2 border-t border-stone-100 text-xs">
           {/* Search */}
           <div className="relative">
             <Search className="w-4 h-4 text-stone-400 absolute left-3 top-3" />
@@ -325,21 +309,6 @@ export const HistoryView: React.FC = () => {
               <option value="payables">Solo Cuentas por Pagar</option>
             </select>
           </div>
-
-          {/* Currency Filter (if not locked in global switcher) */}
-          {activeCurrency === 'ALL' && (
-            <div>
-              <select
-                value={selectedCurrency}
-                onChange={(e) => setSelectedCurrency(e.target.value as Currency | 'all')}
-                className="w-full py-2 px-3 bg-stone-50 rounded-xl border border-stone-200 text-stone-800 font-semibold focus:ring-2 focus:ring-[#143d2b]"
-              >
-                <option value="all">Todas las Monedas</option>
-                <option value="USD">Solo USD ($)</option>
-                <option value="VES">Solo VES (Bs)</option>
-              </select>
-            </div>
-          )}
 
           {/* Date range filter */}
           <div>
@@ -391,7 +360,7 @@ export const HistoryView: React.FC = () => {
           <History className="w-12 h-12 text-stone-300 mx-auto mb-2" />
           <h3 className="text-base font-bold text-stone-800">No se encontraron movimientos</h3>
           <p className="text-xs text-stone-500 mt-1">
-            Prueba ajustando los filtros de búsqueda, fecha o moneda.
+            Prueba ajustando los filtros de búsqueda o fecha.
           </p>
         </div>
       ) : (
@@ -411,12 +380,8 @@ export const HistoryView: React.FC = () => {
                       <span className="px-2 py-0.5 rounded-md text-[10px] font-black uppercase tracking-wider bg-stone-200 text-stone-700">
                         {item.typeLabel}
                       </span>
-                      <span
-                        className={`px-2 py-0.5 rounded-md text-[10px] font-black uppercase text-white ${
-                          item.currency === 'USD' ? 'bg-emerald-700' : 'bg-amber-600'
-                        }`}
-                      >
-                        {item.currency}
+                      <span className="text-[10px] text-stone-400 font-bold uppercase">
+                        USD ($)
                       </span>
                       <span className="text-[11px] text-stone-400 font-medium">
                         {formatDate(item.date)}
@@ -435,7 +400,7 @@ export const HistoryView: React.FC = () => {
                   <div className="text-left sm:text-right">
                     {item.amount !== undefined && (
                       <span className="text-base font-black text-stone-900 block leading-tight">
-                        {formatMoney(item.amount, item.currency)}
+                        {formatMoney(item.amount)}
                       </span>
                     )}
                     {item.statusBadge && (

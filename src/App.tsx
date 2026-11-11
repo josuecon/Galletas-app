@@ -13,6 +13,7 @@ import {
   ShieldCheck,
   Sparkles,
   ExternalLink,
+  Boxes,
 } from 'lucide-react';
 import { AuthProvider, useAuth } from './context/AuthContext.tsx';
 import { DataProvider, useData } from './context/DataContext.tsx';
@@ -20,6 +21,7 @@ import { Header } from './components/Header.tsx';
 import { FinancialSummary } from './components/FinancialSummary.tsx';
 import { QuickActions } from './components/QuickActions.tsx';
 import { ProductionView } from './components/ProductionView.tsx';
+import { InventoryView } from './components/InventoryView.tsx';
 import { SalesView } from './components/SalesView.tsx';
 import { ExpensesView } from './components/ExpensesView.tsx';
 import { ReceivablesView } from './components/ReceivablesView.tsx';
@@ -31,10 +33,12 @@ import { SaleModal } from './components/SaleModal.tsx';
 import { ReceivableModal } from './components/ReceivableModal.tsx';
 import { PayableModal } from './components/PayableModal.tsx';
 import { FirebaseSetupModal } from './components/FirebaseSetupModal.tsx';
+import { formatMoney } from './utils/formatters.ts';
 
 type TabType =
   | 'dashboard'
   | 'production'
+  | 'inventory'
   | 'sales'
   | 'expenses'
   | 'receivables'
@@ -99,7 +103,7 @@ const MainAppContent: React.FC = () => {
                 <Sparkles className="w-5 h-5 text-amber-700" />
                 <h4 className="text-xs font-bold text-stone-900">Cálculos Exactos</h4>
                 <p className="text-[11px] text-stone-500">
-                  Separación estricta entre USD y VES, tandas, ventas y cuentas por cobrar.
+                  Gestión financiera unificada en USD, tandas, ventas y cuentas por cobrar.
                 </p>
               </div>
             </div>
@@ -205,6 +209,19 @@ const MainAppContent: React.FC = () => {
           >
             <Cookie className="w-4 h-4" />
             Tandas de Galletas
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setActiveTab('inventory')}
+            className={`px-4 py-2.5 rounded-2xl text-xs font-black transition flex items-center gap-2 shrink-0 cursor-pointer ${
+              activeTab === 'inventory'
+                ? 'bg-[#143d2b] text-white shadow-sm'
+                : 'bg-white text-stone-600 hover:text-stone-900 border border-stone-200/70'
+            }`}
+          >
+            <Boxes className="w-4 h-4" />
+            Inventario
           </button>
 
           <button
@@ -332,7 +349,7 @@ const MainAppContent: React.FC = () => {
                             <div>
                               <h4 className="font-black text-stone-900">{b.name}</h4>
                               <p className="text-[11px] text-stone-500">
-                                Costo: {b.currency === 'USD' ? `$ ${b.unitCost.toFixed(2)}` : `Bs. ${b.unitCost.toFixed(2)}`} / galleta
+                                Costo: {formatMoney(b.unitCost)} / galleta
                               </p>
                             </div>
                             <div className="flex items-center gap-3">
@@ -396,7 +413,7 @@ const MainAppContent: React.FC = () => {
                         </div>
                         <div className="text-right">
                           <span className="font-black text-sm text-stone-900 block">
-                            {s.currency === 'USD' ? `$ ${s.totalAmount.toFixed(2)} USD` : `Bs. ${s.totalAmount.toFixed(2)} VES`}
+                            {formatMoney(s.totalAmount)}
                           </span>
                           <span
                             className={`text-[10px] font-bold px-2 py-0.5 rounded-md ${
@@ -423,6 +440,8 @@ const MainAppContent: React.FC = () => {
             onOpenCreateBatch={() => setShowBatchModal(true)}
           />
         )}
+
+        {activeTab === 'inventory' && <InventoryView />}
 
         {activeTab === 'sales' && (
           <SalesView onOpenCreateSale={() => setShowSaleModal(true)} />

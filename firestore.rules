@@ -48,6 +48,18 @@ service cloud.firestore {
       match /payables/{payableId} {
         allow read, write: if isOwner(userId) && isValidId(payableId);
       }
+
+      // Ingredients Catalog
+      match /ingredients/{ingredientId} {
+        allow read, write: if isOwner(userId) && isValidId(ingredientId);
+      }
+
+      // Inventory Movements (Immutable Kárdex)
+      match /inventoryMovements/{movementId} {
+        allow read: if isOwner(userId);
+        allow create: if isOwner(userId) && isValidId(movementId);
+        allow update, delete: if false;
+      }
     }
   }
 }

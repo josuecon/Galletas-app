@@ -1,10 +1,27 @@
 import React, { useState } from 'react';
-import { Cookie, Plus, ShoppingCart, Trash2, Edit3, AlertCircle, Layers } from 'lucide-react';
+import {
+  Cookie,
+  Plus,
+  ShoppingCart,
+  Trash2,
+  Edit3,
+  AlertCircle,
+  Layers,
+  ChevronDown,
+  ChevronUp,
+  Boxes,
+  CheckCircle2,
+  AlertTriangle,
+  Info,
+  RefreshCw,
+  Sparkles,
+} from 'lucide-react';
 import { useData } from '../context/DataContext.tsx';
 import { Batch } from '../types/index.ts';
 import { formatMoney, formatDate } from '../utils/formatters.ts';
 import { BatchModal } from './BatchModal.tsx';
 import { ConfirmModal } from './ConfirmModal.tsx';
+import { RegularizeBatchModal } from './RegularizeBatchModal.tsx';
 
 interface Props {
   onSellBatch?: (batchId: string) => void;
@@ -12,18 +29,28 @@ interface Props {
 }
 
 export const ProductionView: React.FC<Props> = ({ onSellBatch, onOpenCreateBatch }) => {
-  const { batches, deleteBatch, activeCurrency } = useData();
+  const { batches, deleteBatch } = useData();
   const [editingBatch, setEditingBatch] = useState<Batch | null>(null);
   const [deletingBatchId, setDeletingBatchId] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
-  // Filter by currency
-  const filteredBatches = batches.filter((b) => {
-    if (activeCurrency !== 'ALL' && b.currency !== activeCurrency) {
-      return false;
-    }
-    return true;
-  });
+  // Estado para controlar qué tarjetas tienen su receta desplegada
+  const [expandedBatchIds, setExpandedBatchIds] = useState<Record<string, boolean>>({});
+
+  // Estado para el modal de regularización de tanda provisional
+  const [regularizingBatch, setRegularizingBatch] = useState<{
+    batch: Batch;
+    ingredientId?: string;
+  } | null>(null);
+
+  const toggleExpandBatch = (batchId: string) => {
+    setExpandedBatchIds((prev) => ({
+      ...prev,
+      [batchId]: !prev[batchId],
+    }));
+  };
+
+  const filteredBatches = batches;
 
   const handleDeleteConfirm = async () => {
     if (!deletingBatchId) return;
@@ -47,7 +74,7 @@ export const ProductionView: React.FC<Props> = ({ onSellBatch, onOpenCreateBatch
             Módulo de Producción (Tandas de Galletas)
           </h2>
           <p className="text-xs text-stone-500 mt-0.5">
-            Registro de horneados, cálculo automático del costo unitario y control de unidades disponibles.
+            Registro de horneados con consumo de inventario, cálculo de costo unitario y regularización de tandas provisionales.
           </p>
         </div>
         <button
@@ -61,9 +88,18 @@ export const ProductionView: React.FC<Props> = ({ onSellBatch, onOpenCreateBatch
       </div>
 
       {errorMsg && (
-        <div className="p-3 bg-red-50 border border-red-200 text-red-700 rounded-xl text-xs flex items-center gap-2 font-semibold">
-          <AlertCircle className="w-4 h-4 shrink-0" />
-          <span>{errorMsg}</span>
+        <div className="p-4 bg-red-50 border border-red-200 text-red-700 rounded-2xl text-xs flex items-center justify-between gap-2 font-semibold shadow-xs animate-fade-in">
+          <div className="flex items-center gap-2">
+            <AlertCircle className="w-4 h-4 shrink-0" />
+            <span>{errorMsg}</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setErrorMsg(null)}
+            className="text-red-700 hover:text-red-900 font-bold text-xs p-1 rounded-lg hover:bg-red-100 transition cursor-pointer"
+          >
+            Cerrar
+          </button>
         </div>
       )}
 
@@ -94,32 +130,72 @@ export const ProductionView: React.FC<Props> = ({ onSellBatch, onOpenCreateBatch
                 ? Math.min(100, Math.round((batch.quantitySold / batch.quantityProduced) * 100))
                 : 0;
 
+            const isExpanded = !!expandedBatchIds[batch.id];
+            const hasRecipe = batch.ingredientsUsed && batch.ingredientsUsed.length > 0;
+            const hasSales = batch.quantitySold > 0;
+            const isProvisional = batch.costStatus === 'provisional';
+
             return (
               <div
                 key={batch.id}
                 className="bg-white rounded-3xl p-5 border border-stone-200 shadow-xs hover:shadow-md transition flex flex-col justify-between"
               >
                 <div>
-                  {/* Top line: Name & Currency */}
+                  {/* Top line: Name & Badges */}
                   <div className="flex items-start justify-between gap-2 mb-2">
                     <h3 className="text-base font-black text-stone-900 leading-snug">
                       {batch.name}
                     </h3>
-                    <span
-                      className={`px-2 py-0.5 rounded-lg text-[10px] font-black uppercase text-white shrink-0 ${
-                        batch.currency === 'USD' ? 'bg-emerald-700' : 'bg-amber-600'
-                      }`}
-                    >
-                      {batch.currency}
-                    </span>
                   </div>
 
-                  <p className="text-[11px] text-stone-500 mb-4">
+                  <p className="text-[11px] text-stone-500 mb-3">
                     Horneada el {formatDate(batch.date)}
                   </p>
 
+                  {/* Badges de Estado (Manual vs. Definitivo vs. Provisional y Faltantes) */}
+                  <div className="flex flex-wrap items-center justify-between gap-1.5 mb-3.5">
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      {batch.isManualCost ? (
+                        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-lg text-xs font-bold bg-stone-100 text-stone-700 border border-stone-200">
+                          Costo Manual
+                        </span>
+                      ) : (
+                        <>
+                          {batch.costStatus === 'definitivo' ? (
+                            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-lg text-xs font-bold bg-emerald-50 text-emerald-800 border border-emerald-200">
+                              <CheckCircle2 className="w-3 h-3 text-emerald-600" /> Costo Definitivo
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-lg text-xs font-bold bg-amber-50 text-amber-900 border border-amber-200">
+                              <AlertTriangle className="w-3 h-3 text-amber-600" /> Costo Provisional
+                            </span>
+                          )}
+
+                          {batch.stockStatus === 'stock_incompleto' && (
+                            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-lg text-xs font-bold bg-rose-50 text-rose-800 border border-rose-200">
+                              Faltantes de Inventario
+                            </span>
+                          )}
+                        </>
+                      )}
+                    </div>
+
+                    {/* Botón de Regularizar Faltantes si la tanda es provisional */}
+                    {isProvisional && (
+                      <button
+                        type="button"
+                        onClick={() => setRegularizingBatch({ batch })}
+                        className="px-2.5 py-1 bg-amber-700 hover:bg-amber-800 text-white rounded-lg text-xs font-black shadow-2xs transition flex items-center gap-1.5 cursor-pointer"
+                        title="Regularizar faltantes de inventario para fijar el costo definitivo"
+                      >
+                        <RefreshCw className="w-3.5 h-3.5" />
+                        <span>Regularizar</span>
+                      </button>
+                    )}
+                  </div>
+
                   {/* Stock status indicator */}
-                  <div className="p-3 rounded-2xl bg-[#fbf8f2] border border-stone-200 mb-4 space-y-2">
+                  <div className="p-3 rounded-2xl bg-[#fbf8f2] border border-stone-200 mb-3.5 space-y-2">
                     <div className="flex items-center justify-between text-xs">
                       <span className="text-stone-500 font-medium">Disponibles:</span>
                       <strong
@@ -146,14 +222,19 @@ export const ProductionView: React.FC<Props> = ({ onSellBatch, onOpenCreateBatch
                   </div>
 
                   {/* Cost breakdown */}
-                  <div className="grid grid-cols-2 gap-2 text-xs pt-1 mb-4">
+                  <div className="grid grid-cols-2 gap-2 text-xs pt-1 mb-3">
                     <div className="p-2.5 rounded-xl bg-stone-50 border border-stone-200">
                       <span className="text-[10px] uppercase font-bold text-stone-400 block">
                         Costo Total Tanda
                       </span>
                       <span className="font-black text-stone-900">
-                        {formatMoney(batch.totalCost, batch.currency)}
+                        {formatMoney(batch.totalCost)}
                       </span>
+                      {batch.otherDirectCostsAmount && batch.otherDirectCostsAmount > 0 ? (
+                        <span className="text-[10px] text-stone-500 block mt-0.5">
+                          Incluye {formatMoney(batch.otherDirectCostsAmount)} directos
+                        </span>
+                      ) : null}
                     </div>
 
                     <div className="p-2.5 rounded-xl bg-emerald-50 border border-emerald-200">
@@ -161,13 +242,122 @@ export const ProductionView: React.FC<Props> = ({ onSellBatch, onOpenCreateBatch
                         Costo por Galleta
                       </span>
                       <span className="font-black text-emerald-900">
-                        {formatMoney(batch.unitCost, batch.currency)}
+                        {formatMoney(batch.unitCost)}
+                      </span>
+                      <span className="text-[10px] text-emerald-700 block mt-0.5">
+                        por unidad
                       </span>
                     </div>
                   </div>
 
+                  {/* Desglose expandible de ingredientes consumidos */}
+                  {hasRecipe && batch.ingredientsUsed && (
+                    <div className="mb-3">
+                      <button
+                        type="button"
+                        onClick={() => toggleExpandBatch(batch.id)}
+                        className="w-full py-2 px-3 bg-stone-50 hover:bg-stone-100 rounded-xl border border-stone-200 text-xs font-bold text-stone-700 flex items-center justify-between transition cursor-pointer"
+                      >
+                        <span className="flex items-center gap-1.5">
+                          <Boxes className="w-3.5 h-3.5 text-[#143d2b]" />
+                          Receta ({batch.ingredientsUsed.length} insumos)
+                        </span>
+                        {isExpanded ? (
+                          <ChevronUp className="w-4 h-4 text-stone-400" />
+                        ) : (
+                          <ChevronDown className="w-4 h-4 text-stone-400" />
+                        )}
+                      </button>
+
+                      {isExpanded && (
+                        <div className="mt-2 space-y-2 p-2.5 bg-stone-50 rounded-xl border border-stone-200 text-xs animate-fade-in">
+                          {batch.ingredientsUsed.map((ingUsage, idx) => {
+                            const physicalShortage = Math.max(
+                              0,
+                              Math.round(
+                                (ingUsage.requiredBaseQty - ingUsage.physicallyCoveredBaseQty) * 10000
+                              ) / 10000
+                            );
+                            const valueShortage = ingUsage.uncoveredBaseQty;
+
+                            return (
+                              <div
+                                key={idx}
+                                className="p-2.5 bg-white rounded-xl border border-stone-200/80 space-y-1.5 shadow-2xs"
+                              >
+                                <div className="flex items-center justify-between font-bold text-stone-900">
+                                  <span>{ingUsage.ingredientName}</span>
+                                  <span className="text-emerald-800 font-black">
+                                    {formatMoney(ingUsage.coveredCost)}
+                                  </span>
+                                </div>
+
+                                <div className="grid grid-cols-2 gap-1 text-[11px] text-stone-600">
+                                  <div>
+                                    <span className="text-stone-400">Requerido: </span>
+                                    <span className="font-semibold text-stone-800">
+                                      {ingUsage.requiredQuantity} {ingUsage.requiredUnit}
+                                    </span>
+                                  </div>
+                                  <div>
+                                    <span className="text-stone-400">Cubierto almacén: </span>
+                                    <span className="font-semibold text-stone-800">
+                                      {ingUsage.physicallyCoveredBaseQty}
+                                    </span>
+                                  </div>
+                                </div>
+
+                                {/* Diagnóstico de faltante económico y físico */}
+                                {valueShortage > 0 ? (
+                                  <div className="p-2 bg-amber-50 rounded-lg border border-amber-200 flex items-center justify-between gap-2">
+                                    <div className="space-y-0.5">
+                                      <div className="text-[11px] font-bold text-amber-950 flex items-center gap-1">
+                                        <AlertTriangle className="w-3 h-3 text-amber-600 shrink-0" />
+                                        <span>Faltante a valorizar: {valueShortage}</span>
+                                      </div>
+                                      {physicalShortage > 0 && (
+                                        <div className="text-[10px] text-amber-800">
+                                          Faltante físico en almacén: {physicalShortage}
+                                        </div>
+                                      )}
+                                    </div>
+                                    <button
+                                      type="button"
+                                      onClick={() =>
+                                        setRegularizingBatch({
+                                          batch,
+                                          ingredientId: ingUsage.ingredientId,
+                                        })
+                                      }
+                                      className="px-2 py-1 bg-amber-700 hover:bg-amber-800 text-white rounded-md text-[10px] font-black transition flex items-center gap-1 cursor-pointer shrink-0"
+                                      title="Regularizar este ingrediente"
+                                    >
+                                      <RefreshCw className="w-3 h-3" />
+                                      Regularizar
+                                    </button>
+                                  </div>
+                                ) : physicalShortage > 0 ? (
+                                  <div className="p-1.5 bg-stone-100 rounded-lg border border-stone-200 text-[10px] text-stone-600 flex items-center gap-1">
+                                    <Info className="w-3 h-3 text-stone-500 shrink-0" />
+                                    <span>
+                                      100% Valorizado • Faltante físico de almacén no repuesto: {physicalShortage}
+                                    </span>
+                                  </div>
+                                ) : (
+                                  <div className="text-[10px] text-emerald-700 font-semibold flex items-center gap-1 pt-0.5">
+                                    <CheckCircle2 className="w-3 h-3" /> 100% Cubierto de inventario y valorizado
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
                   {batch.observations && (
-                    <p className="text-[11px] text-stone-500 italic bg-stone-50 p-2 rounded-lg border border-stone-100 mb-4">
+                    <p className="text-[11px] text-stone-500 italic bg-stone-50 p-2 rounded-lg border border-stone-100 mb-3">
                       "{batch.observations}"
                     </p>
                   )}
@@ -184,11 +374,24 @@ export const ProductionView: React.FC<Props> = ({ onSellBatch, onOpenCreateBatch
                     >
                       <Edit3 className="w-4 h-4" />
                     </button>
+
+                    {/* Botón de eliminación protegido si tiene ventas asociadas */}
                     <button
                       type="button"
-                      onClick={() => setDeletingBatchId(batch.id)}
-                      title="Eliminar Tanda"
-                      className="p-2 text-stone-400 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition cursor-pointer"
+                      disabled={hasSales}
+                      onClick={() => {
+                        if (!hasSales) setDeletingBatchId(batch.id);
+                      }}
+                      title={
+                        hasSales
+                          ? 'Esta tanda tiene ventas asociadas y no puede eliminarse'
+                          : 'Eliminar Tanda'
+                      }
+                      className={`p-2 rounded-xl transition ${
+                        hasSales
+                          ? 'text-stone-300 cursor-not-allowed opacity-50'
+                          : 'text-stone-400 hover:text-rose-600 hover:bg-rose-50 cursor-pointer'
+                      }`}
                     >
                       <Trash2 className="w-4 h-4" />
                     </button>
@@ -220,11 +423,21 @@ export const ProductionView: React.FC<Props> = ({ onSellBatch, onOpenCreateBatch
         />
       )}
 
+      {/* Regularize Modal */}
+      {regularizingBatch && (
+        <RegularizeBatchModal
+          isOpen={!!regularizingBatch}
+          onClose={() => setRegularizingBatch(null)}
+          batch={regularizingBatch.batch}
+          initialIngredientId={regularizingBatch.ingredientId}
+        />
+      )}
+
       {/* Confirm Delete */}
       <ConfirmModal
         isOpen={!!deletingBatchId}
         title="¿Eliminar esta tanda de producción?"
-        message="Esta acción no se puede deshacer. Solo puedes eliminar tandas que no tengan ventas asociadas."
+        message="Esta acción reintegrará al inventario los insumos consumidos que fueron cubiertos físicamente. Solo puedes eliminar tandas que no tengan ventas asociadas."
         confirmLabel="Eliminar Tanda"
         onConfirm={handleDeleteConfirm}
         onCancel={() => setDeletingBatchId(null)}

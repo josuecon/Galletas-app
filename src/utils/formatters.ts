@@ -1,16 +1,11 @@
-import { Currency } from '../types/index.ts';
-
-export function formatMoney(amount: number, currency: Currency): string {
+export function formatMoney(amount: number): string {
   const safeAmount = isNaN(amount) ? 0 : amount;
   const formatted = new Intl.NumberFormat('es-VE', {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   }).format(safeAmount);
 
-  if (currency === 'USD') {
-    return `$ ${formatted} USD`;
-  }
-  return `Bs. ${formatted} VES`;
+  return `$ ${formatted}`;
 }
 
 export function formatDate(dateString: string): string {

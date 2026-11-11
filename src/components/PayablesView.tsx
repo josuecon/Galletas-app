@@ -11,17 +11,12 @@ interface Props {
 }
 
 export const PayablesView: React.FC<Props> = ({ onOpenCreatePayable }) => {
-  const { payables, addPayableInstallment, deletePayable, activeCurrency } = useData();
+  const { payables, addPayableInstallment, deletePayable } = useData();
   const [selectedPayableForInstallment, setSelectedPayableForInstallment] = useState<Payable | null>(null);
   const [deletingPayableId, setDeletingPayableId] = useState<string | null>(null);
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
-  const filteredPayables = payables.filter((p) => {
-    if (activeCurrency !== 'ALL' && p.currency !== activeCurrency) {
-      return false;
-    }
-    return true;
-  });
+  const filteredPayables = payables;
 
   const handleInstallmentConfirm = async (amount: number, date: string, notes?: string) => {
     if (!selectedPayableForInstallment) return;
@@ -103,12 +98,8 @@ export const PayablesView: React.FC<Props> = ({ onOpenCreatePayable }) => {
                       </h3>
                       <p className="text-xs text-stone-500">{pay.concept}</p>
                     </div>
-                    <span
-                      className={`px-2 py-0.5 rounded-lg text-[10px] font-black uppercase text-white shrink-0 ${
-                        pay.currency === 'USD' ? 'bg-emerald-700' : 'bg-amber-600'
-                      }`}
-                    >
-                      {pay.currency}
+                    <span className="text-[11px] text-stone-400 font-medium shrink-0">
+                      USD ($)
                     </span>
                   </div>
 
@@ -123,21 +114,21 @@ export const PayablesView: React.FC<Props> = ({ onOpenCreatePayable }) => {
                     <div className="flex justify-between text-xs">
                       <span className="text-stone-500 font-medium">Total Obligación:</span>
                       <strong className="text-stone-900 font-bold">
-                        {formatMoney(pay.totalAmount, pay.currency)}
+                        {formatMoney(pay.totalAmount)}
                       </strong>
                     </div>
 
                     <div className="flex justify-between text-xs">
                       <span className="text-stone-500 font-medium">Pagado hasta ahora:</span>
                       <span className="text-emerald-700 font-bold">
-                        {formatMoney(pay.totalPaid, pay.currency)}
+                        {formatMoney(pay.totalPaid)}
                       </span>
                     </div>
 
                     <div className="flex justify-between text-sm font-black border-t border-stone-200 pt-1.5">
                       <span className="text-stone-700">Saldo Pendiente:</span>
                       <span className={isFullyPaid ? 'text-emerald-700' : 'text-rose-800'}>
-                        {formatMoney(pay.pendingBalance, pay.currency)}
+                        {formatMoney(pay.pendingBalance)}
                       </span>
                     </div>
                   </div>
@@ -180,7 +171,7 @@ export const PayablesView: React.FC<Props> = ({ onOpenCreatePayable }) => {
                         >
                           <div>
                             <span className="font-semibold text-stone-800">
-                              {formatMoney(inst.amount, pay.currency)}
+                              {formatMoney(inst.amount)}
                             </span>
                             {inst.notes && <span className="text-stone-500 block text-[10px]">"{inst.notes}"</span>}
                           </div>

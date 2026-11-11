@@ -108,18 +108,18 @@ export const InstallmentModal: React.FC<Props> = ({
           </div>
           <div className="flex justify-between pt-2 border-t border-stone-100">
             <span className="text-stone-500">Total Obligación:</span>
-            <span className="font-semibold">{formatMoney(item.totalAmount, item.currency)}</span>
+            <span className="font-semibold">{formatMoney(item.totalAmount)}</span>
           </div>
           <div className="flex justify-between">
             <span className="text-stone-500">Ya Pagado / Cobrado:</span>
             <span className="text-emerald-700 font-semibold">
-              {formatMoney(item.totalPaid, item.currency)}
+              {formatMoney(item.totalPaid)}
             </span>
           </div>
           <div className="flex justify-between text-sm font-bold pt-1 border-t border-stone-100">
             <span className="text-stone-800">Saldo Pendiente:</span>
             <span className={isReceivable ? 'text-amber-800 font-black' : 'text-rose-800 font-black'}>
-              {formatMoney(pending, item.currency)}
+              {formatMoney(pending)}
             </span>
           </div>
         </div>
@@ -137,27 +137,30 @@ export const InstallmentModal: React.FC<Props> = ({
           <div>
             <div className="flex items-center justify-between mb-1">
               <label className="text-xs font-bold text-stone-700 uppercase tracking-wider">
-                Monto del Abono ({item.currency}) <span className="text-red-500">*</span>
+                Monto del Abono (USD $) <span className="text-red-500">*</span>
               </label>
               <button
                 type="button"
                 onClick={handlePayFull}
                 className="text-xs font-bold text-[#143d2b] hover:underline cursor-pointer"
               >
-                Pagar todo ({pending.toFixed(2)})
+                Pagar todo (${pending.toFixed(2)})
               </button>
             </div>
-            <input
-              type="number"
-              step="0.01"
-              min="0.01"
-              max={pending}
-              required
-              value={amount}
-              onChange={(e) => setAmount(e.target.value)}
-              placeholder="0.00"
-              className="w-full p-2.5 bg-white rounded-xl border border-stone-300 text-stone-900 text-base font-black focus:ring-2 focus:ring-[#143d2b]"
-            />
+            <div className="relative">
+              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-stone-400 font-bold text-sm">$</span>
+              <input
+                type="number"
+                step="0.01"
+                min="0.01"
+                max={pending}
+                required
+                value={amount}
+                onChange={(e) => setAmount(e.target.value)}
+                placeholder="0.00"
+                className="w-full pl-7 pr-3 py-2.5 bg-white rounded-xl border border-stone-300 text-stone-900 text-base font-black focus:ring-2 focus:ring-[#143d2b]"
+              />
+            </div>
           </div>
 
           {/* Date */}

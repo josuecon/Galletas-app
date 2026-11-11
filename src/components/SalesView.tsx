@@ -10,15 +10,10 @@ interface Props {
 }
 
 export const SalesView: React.FC<Props> = ({ onOpenCreateSale }) => {
-  const { sales, deleteSale, activeCurrency } = useData();
+  const { sales, deleteSale } = useData();
   const [deletingSaleId, setDeletingSaleId] = useState<string | null>(null);
 
-  const filteredSales = sales.filter((s) => {
-    if (activeCurrency !== 'ALL' && s.currency !== activeCurrency) {
-      return false;
-    }
-    return true;
-  });
+  const filteredSales = sales;
 
   const handleDeleteConfirm = async () => {
     if (!deletingSaleId) return;
@@ -87,12 +82,8 @@ export const SalesView: React.FC<Props> = ({ onOpenCreateSale }) => {
                     <span className="text-stone-500 font-medium">
                       {formatDate(sale.date)}
                     </span>
-                    <span
-                      className={`px-2 py-0.5 rounded-lg text-[10px] font-black uppercase text-white ${
-                        sale.currency === 'USD' ? 'bg-emerald-700' : 'bg-amber-600'
-                      }`}
-                    >
-                      {sale.currency}
+                    <span className="text-[11px] text-stone-400 font-medium">
+                      USD ($)
                     </span>
                   </div>
 
@@ -121,7 +112,7 @@ export const SalesView: React.FC<Props> = ({ onOpenCreateSale }) => {
                     </div>
                     <div className="flex justify-between border-t border-stone-200/80 pt-1">
                       <span className="text-stone-500">Precio {isPack ? 'por paq.' : 'por unidad'}:</span>
-                      <span className="font-semibold">{formatMoney(sale.salePrice, sale.currency)}</span>
+                      <span className="font-semibold">{formatMoney(sale.salePrice)}</span>
                     </div>
                   </div>
 
@@ -140,7 +131,7 @@ export const SalesView: React.FC<Props> = ({ onOpenCreateSale }) => {
                         Total Venta
                       </span>
                       <span className="text-lg font-black text-stone-900">
-                        {formatMoney(sale.totalAmount, sale.currency)}
+                        {formatMoney(sale.totalAmount)}
                       </span>
                     </div>
 
@@ -158,7 +149,7 @@ export const SalesView: React.FC<Props> = ({ onOpenCreateSale }) => {
                       {sale.paymentStatus === 'parcial' && (
                         <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-xl text-xs font-bold bg-amber-100 text-amber-800">
                           <Clock className="w-3.5 h-3.5 text-amber-700" /> Cobrado:{' '}
-                          {formatMoney(sale.amountPaid, sale.currency)}
+                          {formatMoney(sale.amountPaid || 0)}
                         </span>
                       )}
                     </div>

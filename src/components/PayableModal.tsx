@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { X, Check, CreditCard, AlertCircle } from 'lucide-react';
 import { useData } from '../context/DataContext.tsx';
-import { Currency, ExpenseCategory, ExpenseType } from '../types/index.ts';
+import { ExpenseCategory, ExpenseType } from '../types/index.ts';
 import { getTodayDateString } from '../utils/formatters.ts';
 
 interface Props {
@@ -23,14 +23,11 @@ const CATEGORIES: ExpenseCategory[] = [
 ];
 
 export const PayableModal: React.FC<Props> = ({ isOpen, onClose }) => {
-  const { addPayable, activeCurrency } = useData();
+  const { addPayable } = useData();
 
   const [supplierName, setSupplierName] = useState('');
   const [concept, setConcept] = useState('');
   const [totalAmount, setTotalAmount] = useState('');
-  const [currency, setCurrency] = useState<Currency>(
-    activeCurrency === 'VES' ? 'VES' : 'USD'
-  );
   const [date, setDate] = useState(getTodayDateString());
   const [dueDate, setDueDate] = useState('');
   const [expenseCategory, setExpenseCategory] = useState<ExpenseCategory>('Ingredientes');
@@ -66,7 +63,6 @@ export const PayableModal: React.FC<Props> = ({ isOpen, onClose }) => {
         supplierName: supplierName.trim(),
         concept: concept.trim(),
         totalAmount: Math.round(amount * 100) / 100,
-        currency,
         date,
         dueDate: dueDate || undefined,
         expenseCategory,
@@ -196,12 +192,13 @@ export const PayableModal: React.FC<Props> = ({ isOpen, onClose }) => {
             </div>
           </div>
 
-          {/* Amount & Currency */}
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="block text-xs font-bold text-stone-700 uppercase tracking-wider mb-1">
-                Importe Total <span className="text-red-500">*</span>
-              </label>
+          {/* Amount (USD) */}
+          <div>
+            <label className="block text-xs font-bold text-stone-700 uppercase tracking-wider mb-1">
+              Importe Total (USD $) <span className="text-red-500">*</span>
+            </label>
+            <div className="relative">
+              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-stone-400 font-bold text-sm">$</span>
               <input
                 type="number"
                 step="0.01"
@@ -210,38 +207,8 @@ export const PayableModal: React.FC<Props> = ({ isOpen, onClose }) => {
                 value={totalAmount}
                 onChange={(e) => setTotalAmount(e.target.value)}
                 placeholder="0.00"
-                className="w-full p-2.5 bg-white rounded-xl border border-stone-300 text-stone-900 text-sm font-bold focus:ring-2 focus:ring-[#143d2b]"
+                className="w-full pl-7 pr-3 py-2.5 bg-white rounded-xl border border-stone-300 text-stone-900 text-sm font-bold focus:ring-2 focus:ring-[#143d2b]"
               />
-            </div>
-
-            <div>
-              <label className="block text-xs font-bold text-stone-700 uppercase tracking-wider mb-1">
-                Moneda <span className="text-red-500">*</span>
-              </label>
-              <div className="grid grid-cols-2 gap-1.5 p-1 bg-stone-200/70 rounded-xl text-xs font-bold">
-                <button
-                  type="button"
-                  onClick={() => setCurrency('USD')}
-                  className={`py-1.5 rounded-lg transition cursor-pointer text-center ${
-                    currency === 'USD'
-                      ? 'bg-emerald-700 text-white shadow-xs'
-                      : 'text-stone-600 hover:text-stone-900'
-                  }`}
-                >
-                  USD ($)
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setCurrency('VES')}
-                  className={`py-1.5 rounded-lg transition cursor-pointer text-center ${
-                    currency === 'VES'
-                      ? 'bg-amber-600 text-white shadow-xs'
-                      : 'text-stone-600 hover:text-stone-900'
-                  }`}
-                >
-                  VES (Bs)
-                </button>
-              </div>
             </div>
           </div>
 
