@@ -44,18 +44,30 @@ export interface FirestoreErrorInfo {
 
 const STORAGE_KEY = 'cookie_business_firebase_config';
 
-export function getStoredFirebaseConfig(): FirebaseClientConfig | null {
+// Configuración centralizada y permanente del proyecto ildolce-ba7d0
+export const DEFAULT_FIREBASE_CONFIG: FirebaseClientConfig = {
+  apiKey: (import.meta.env.VITE_FIREBASE_API_KEY as string) || 'AIzaSyCmBl4vM9O0rQAB6d5Q3ZIy6xRhCQTblFs',
+  authDomain: (import.meta.env.VITE_FIREBASE_AUTH_DOMAIN as string) || 'ildolce-ba7d0.firebaseapp.com',
+  projectId: (import.meta.env.VITE_FIREBASE_PROJECT_ID as string) || 'ildolce-ba7d0',
+  storageBucket: (import.meta.env.VITE_FIREBASE_STORAGE_BUCKET as string) || 'ildolce-ba7d0.firebasestorage.app',
+  messagingSenderId: (import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID as string) || '143794028299',
+  appId: (import.meta.env.VITE_FIREBASE_APP_ID as string) || '1:143794028299:web:2ca73159aba908ee19ac0e',
+  firestoreDatabaseId: (import.meta.env.VITE_FIREBASE_DATABASE_ID as string) || '(default)',
+};
+
+export function getStoredFirebaseConfig(): FirebaseClientConfig {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return null;
-    const parsed = JSON.parse(raw);
-    if (parsed && parsed.apiKey && parsed.projectId) {
-      return parsed;
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (parsed && parsed.apiKey && parsed.projectId) {
+        return parsed;
+      }
     }
   } catch (e) {
     console.error('Error reading stored Firebase config', e);
   }
-  return null;
+  return DEFAULT_FIREBASE_CONFIG;
 }
 
 export function saveStoredFirebaseConfig(config: FirebaseClientConfig): void {

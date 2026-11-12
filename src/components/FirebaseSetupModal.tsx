@@ -140,13 +140,13 @@ service cloud.firestore {
           {isConfigured && (
             <button
               onClick={() => {
-                if (window.confirm('¿Seguro que deseas desvincular la configuración actual de Firebase?')) {
+                if (window.confirm('¿Seguro que deseas restaurar la configuración predeterminada del proyecto ildolce-ba7d0?')) {
                   clearConfig();
                 }
               }}
-              className="text-red-700 hover:text-red-800 underline font-medium cursor-pointer"
+              className="text-amber-800 hover:text-amber-900 underline font-medium cursor-pointer"
             >
-              Desvincular
+              Restablecer valores predeterminados
             </button>
           )}
         </div>

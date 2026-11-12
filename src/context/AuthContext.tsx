@@ -118,7 +118,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const handleClearConfig = () => {
     clearStoredFirebaseConfig();
-    setFirebaseConfig(null);
+    setFirebaseConfig(getStoredFirebaseConfig());
     setUser(null);
     window.location.reload();
   };
