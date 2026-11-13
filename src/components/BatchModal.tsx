@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
   X,
   Check,
@@ -8,8 +8,6 @@ import {
   Plus,
   Trash2,
   Boxes,
-  Layers,
-  HelpCircle,
   CheckCircle2,
   AlertTriangle,
   Info,
@@ -37,78 +35,242 @@ interface DirectCostDraft {
   amount: string;
 }
 
-export const BatchModal: React.FC<Props> = ({ isOpen, onClose, batchToEdit }) => {
+// Helper para unidades según dimensión
+const getCompatibleUnits = (dimension?: DimensionType): UnitOfMeasure[] => {
+  if (dimension === 'masa') return ['g', 'kg'];
+  if (dimension === 'volumen') return ['ml', 'l'];
+  if (dimension === 'unidad') return ['unidad'];
+  return ['g', 'kg'];
+};
+
+const getDefaultUnit = (dimension?: DimensionType): UnitOfMeasure => {
+  if (dimension === 'masa') return 'g';
+  if (dimension === 'volumen') return 'ml';
+  if (dimension === 'unidad') return 'unidad';
+  return 'g';
+};
+
+class BatchModalErrorBoundary extends React.Component<
+  { onClose: () => void; children: React.ReactNode },
+  { hasError: boolean; errorMessage: string }
+> {
+  constructor(props: { onClose: () => void; children: React.ReactNode }) {
+    super(props);
+    this.state = { hasError: false, errorMessage: '' };
+  }
+
+  static getDerivedStateFromError(error: Error) {
+    return {
+      hasError: true,
+      errorMessage: error?.message || 'Error inesperado al mostrar el formulario de tanda.',
+    };
+  }
+
+  componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
+    console.error('Error en BatchModal:', error, errorInfo);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs">
+          <div className="bg-[#fbf8f2] text-stone-900 rounded-3xl w-full max-w-md shadow-2xl border border-stone-200 p-6 space-y-4">
+            <div className="flex items-center gap-2.5 text-red-700">
+              <AlertCircle className="w-6 h-6 shrink-0" />
+              <h2 className="text-base font-black">No se pudo mostrar el formulario</h2>
+            </div>
+            <p className="text-xs text-stone-600 bg-red-50 border border-red-200 rounded-xl p-3 font-medium">
+              {this.state.errorMessage}
+            </p>
+            <div className="flex justify-end">
+              <button
+                type="button"
+                onClick={() => {
+                  this.setState({ hasError: false, errorMessage: '' });
+                  this.props.onClose();
+                }}
+                className="px-4 py-2 bg-[#143d2b] text-white rounded-xl text-xs font-bold cursor-pointer"
+              >
+                Cerrar
+              </button>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    return this.props.children;
+  }
+}
+
+const BatchModalContent: React.FC<Props> = ({ isOpen, onClose, batchToEdit }) => {
   const { addBatch, updateBatch, ingredients } = useData();
+  const safeIngredients = Array.isArray(ingredients) ? ingredients : [];
 
-  // Helper para unidades según dimensión
-  const getCompatibleUnits = (dimension?: DimensionType): UnitOfMeasure[] => {
-    if (dimension === 'masa') return ['g', 'kg'];
-    if (dimension === 'volumen') return ['ml', 'l'];
-    if (dimension === 'unidad') return ['unidad'];
-    return ['g', 'kg'];
-  };
-
-  const getDefaultUnit = (dimension?: DimensionType): UnitOfMeasure => {
-    if (dimension === 'masa') return 'g';
-    if (dimension === 'volumen') return 'ml';
-    if (dimension === 'unidad') return 'unidad';
-    return 'g';
-  };
-
-  // Modo: Inventario (Receta) vs. Manual
   const isEditing = !!batchToEdit;
-  const initialMode = isEditing
-    ? batchToEdit.ingredientsUsed && batchToEdit.ingredientsUsed.length > 0
-      ? 'inventory'
-      : 'manual'
-    : ingredients.length > 0
-    ? 'inventory'
-    : 'manual';
 
-  const [creationMode, setCreationMode] = useState<'inventory' | 'manual'>(initialMode);
+  const [creationMode, setCreationMode] = useState<'inventory' | 'manual'>('manual');
+  const [name, setName] = useState('');
+  const [date, setDate] = useState(getTodayDateString());
+  const [quantityProduced, setQuantityProduced] = useState<string>('');
+  const [observations, setObservations] = useState('');
+  const [manualCost, setManualCost] = useState<string>('');
+  const [recipeItems, setRecipeItems] = useState<RecipeItemDraft[]>([]);
+  const [directCosts, setDirectCosts] = useState<DirectCostDraft[]>([]);
+  const [submitting, setSubmitting] = useState(false);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
-  // Campos generales
-  const [name, setName] = useState(batchToEdit?.name || '');
-  const [date, setDate] = useState(batchToEdit?.date || getTodayDateString());
-  const [quantityProduced, setQuantityProduced] = useState<string>(
-    batchToEdit ? String(batchToEdit.quantityProduced) : ''
-  );
-  const [observations, setObservations] = useState(batchToEdit?.observations || '');
+  // Sincronizar e inicializar estado cada vez que el modal se abre o cambia batchToEdit
+  useEffect(() => {
+    if (!isOpen) return;
+    setErrorMsg(null);
+    setSubmitting(false);
 
-  // Costo manual (solo para modo manual)
-  const [manualCost, setManualCost] = useState<string>(
-    batchToEdit && batchToEdit.isManualCost ? String(batchToEdit.totalCost) : ''
-  );
+    if (batchToEdit) {
+      const hasRecipe =
+        Array.isArray(batchToEdit.ingredientsUsed) && batchToEdit.ingredientsUsed.length > 0;
+      setCreationMode(hasRecipe ? 'inventory' : 'manual');
+      setName(batchToEdit.name || '');
+      setDate(batchToEdit.date || getTodayDateString());
+      setQuantityProduced(
+        batchToEdit.quantityProduced !== undefined ? String(batchToEdit.quantityProduced) : ''
+      );
+      setObservations(batchToEdit.observations || '');
+      setManualCost(
+        batchToEdit.isManualCost && batchToEdit.totalCost !== undefined
+          ? String(batchToEdit.totalCost)
+          : ''
+      );
+      setRecipeItems([]);
+      setDirectCosts([]);
+    } else {
+      setCreationMode(safeIngredients.length > 0 ? 'inventory' : 'manual');
+      setName('');
+      setDate(getTodayDateString());
+      setQuantityProduced('');
+      setObservations('');
+      setManualCost('');
+      setDirectCosts([]);
+      if (safeIngredients.length > 0) {
+        const first = safeIngredients[0];
+        setRecipeItems([
+          {
+            id: 'item_' + Date.now(),
+            ingredientId: first.id,
+            quantity: '',
+            unit: getDefaultUnit(first.dimension),
+          },
+        ]);
+      } else {
+        setRecipeItems([]);
+      }
+    }
+  }, [isOpen, batchToEdit]);
 
-  // Receta (Modo Inventario)
-  const [recipeItems, setRecipeItems] = useState<RecipeItemDraft[]>(() => {
-    if (ingredients.length > 0) {
-      const first = ingredients[0];
-      return [
+  // Cálculo reactivo de disponibilidad y resumen previo para el modo inventario
+  // IMPORTANTE: Todos los hooks deben ejecutarse incondicionalmente antes de cualquier return anticipado.
+  const recipePreview = useMemo(() => {
+    let coveredCostSum = 0;
+    let hasFaltantes = false;
+
+    const itemsPreview = recipeItems.map((item) => {
+      const ing = safeIngredients.find((i) => i.id === item.ingredientId);
+      const qtyNum = parseFloat(item.quantity);
+      const validQty = Number.isFinite(qtyNum) && qtyNum > 0 ? qtyNum : 0;
+
+      if (!ing || validQty <= 0) {
+        return {
+          ...item,
+          ing,
+          reqBase: 0,
+          availStock: Math.max(0, Number(ing?.physicalStock) || 0),
+          coveredBase: 0,
+          uncoveredBase: 0,
+          status: 'empty' as const,
+          cost: 0,
+        };
+      }
+
+      const unitToConvert = isUnitCompatible(item.unit, ing.dimension)
+        ? item.unit
+        : getDefaultUnit(ing.dimension);
+      const reqBase = convertToBaseUnit(validQty, unitToConvert);
+      const availStock = Math.max(0, Number(ing.physicalStock) || 0);
+      const coveredBase = Math.min(reqBase, availStock);
+      const uncoveredBase = Math.max(0, Math.round((reqBase - coveredBase) * 10000) / 10000);
+      const unitAvgCost = Number(ing.averageCost) || 0;
+      const cost = Math.round(coveredBase * unitAvgCost * 100) / 100;
+      coveredCostSum += cost;
+
+      if (uncoveredBase > 0) {
+        hasFaltantes = true;
+      }
+
+      let status: 'full' | 'partial' | 'none' = 'full';
+      if (availStock <= 0) {
+        status = 'none';
+      } else if (uncoveredBase > 0) {
+        status = 'partial';
+      }
+
+      return {
+        ...item,
+        ing,
+        reqBase,
+        availStock,
+        coveredBase,
+        uncoveredBase,
+        status,
+        cost,
+      };
+    });
+
+    const validDirectCosts = directCosts.filter(
+      (c) => c.description.trim() && Number.isFinite(parseFloat(c.amount)) && parseFloat(c.amount) > 0
+    );
+    const directCostsTotal = validDirectCosts.reduce(
+      (sum, c) => sum + (parseFloat(c.amount) || 0),
+      0
+    );
+    const estTotalCost = Math.round((coveredCostSum + directCostsTotal) * 100) / 100;
+    const qtyProducedNum = parseInt(quantityProduced, 10) || 0;
+    const estUnitCost =
+      qtyProducedNum > 0 ? Math.round((estTotalCost / qtyProducedNum) * 10000) / 10000 : 0;
+
+    return {
+      itemsPreview,
+      coveredCostSum,
+      directCostsTotal,
+      estTotalCost,
+      estUnitCost,
+      hasFaltantes,
+    };
+  }, [recipeItems, safeIngredients, directCosts, quantityProduced]);
+
+  if (!isOpen) return null;
+
+  const hasSales = isEditing && (batchToEdit?.quantitySold ?? 0) > 0;
+
+  // Cambio de modalidad en creación
+  const handleSelectMode = (nextMode: 'inventory' | 'manual') => {
+    setCreationMode(nextMode);
+    setErrorMsg(null);
+    if (nextMode === 'inventory' && recipeItems.length === 0 && safeIngredients.length > 0) {
+      const first = safeIngredients[0];
+      setRecipeItems([
         {
           id: 'item_' + Date.now(),
           ingredientId: first.id,
           quantity: '',
           unit: getDefaultUnit(first.dimension),
         },
-      ];
+      ]);
     }
-    return [];
-  });
-
-  // Otros costos directos (Modo Inventario)
-  const [directCosts, setDirectCosts] = useState<DirectCostDraft[]>([]);
-
-  const [submitting, setSubmitting] = useState(false);
-  const [errorMsg, setErrorMsg] = useState<string | null>(null);
-
-  if (!isOpen) return null;
-
-  const hasSales = isEditing && (batchToEdit.quantitySold > 0);
+  };
 
   // Manejo de cambio de ingrediente en un renglón
   const handleIngredientChange = (rowId: string, newIngredientId: string) => {
-    const selectedIng = ingredients.find((i) => i.id === newIngredientId);
+    const selectedIng = safeIngredients.find((i) => i.id === newIngredientId);
     setRecipeItems((prev) =>
       prev.map((row) => {
         if (row.id !== rowId) return row;
@@ -140,8 +302,8 @@ export const BatchModal: React.FC<Props> = ({ isOpen, onClose, batchToEdit }) =>
 
   // Agregar renglón de ingrediente
   const handleAddRecipeRow = () => {
-    if (ingredients.length === 0) return;
-    const first = ingredients[0];
+    if (safeIngredients.length === 0) return;
+    const first = safeIngredients[0];
     setRecipeItems((prev) => [
       ...prev,
       {
@@ -182,80 +344,6 @@ export const BatchModal: React.FC<Props> = ({ isOpen, onClose, batchToEdit }) =>
     setDirectCosts((prev) => prev.filter((c) => c.id !== rowId));
   };
 
-  // Cálculo reactivo de disponibilidad y resumen previo para el modo inventario
-  const recipePreview = useMemo(() => {
-    let coveredCostSum = 0;
-    let hasFaltantes = false;
-
-    const itemsPreview = recipeItems.map((item) => {
-      const ing = ingredients.find((i) => i.id === item.ingredientId);
-      const qtyNum = parseFloat(item.quantity) || 0;
-
-      if (!ing || qtyNum <= 0) {
-        return {
-          ...item,
-          ing,
-          reqBase: 0,
-          availStock: ing?.physicalStock || 0,
-          coveredBase: 0,
-          uncoveredBase: 0,
-          status: 'empty' as const,
-          cost: 0,
-        };
-      }
-
-      const reqBase = convertToBaseUnit(qtyNum, item.unit);
-      const availStock = Math.max(0, ing.physicalStock || 0);
-      const coveredBase = Math.min(reqBase, availStock);
-      const uncoveredBase = Math.max(0, Math.round((reqBase - coveredBase) * 10000) / 10000);
-      const cost = Math.round((coveredBase * (ing.averageCost || 0)) * 100) / 100;
-      coveredCostSum += cost;
-
-      if (uncoveredBase > 0) {
-        hasFaltantes = true;
-      }
-
-      let status: 'full' | 'partial' | 'none' = 'full';
-      if (availStock <= 0) {
-        status = 'none';
-      } else if (uncoveredBase > 0) {
-        status = 'partial';
-      }
-
-      return {
-        ...item,
-        ing,
-        reqBase,
-        availStock,
-        coveredBase,
-        uncoveredBase,
-        status,
-        cost,
-      };
-    });
-
-    const validDirectCosts = directCosts.filter(
-      (c) => c.description.trim() && parseFloat(c.amount) > 0
-    );
-    const directCostsTotal = validDirectCosts.reduce(
-      (sum, c) => sum + (parseFloat(c.amount) || 0),
-      0
-    );
-    const estTotalCost = Math.round((coveredCostSum + directCostsTotal) * 100) / 100;
-    const qtyProducedNum = parseInt(quantityProduced, 10) || 0;
-    const estUnitCost =
-      qtyProducedNum > 0 ? Math.round((estTotalCost / qtyProducedNum) * 10000) / 10000 : 0;
-
-    return {
-      itemsPreview,
-      coveredCostSum,
-      directCostsTotal,
-      estTotalCost,
-      estUnitCost,
-      hasFaltantes,
-    };
-  }, [recipeItems, ingredients, directCosts, quantityProduced]);
-
   // Cálculo en tiempo real para modo manual
   const qtyNum = parseInt(quantityProduced, 10);
   const costManualNum = parseFloat(manualCost);
@@ -280,7 +368,7 @@ export const BatchModal: React.FC<Props> = ({ isOpen, onClose, batchToEdit }) =>
 
     setSubmitting(true);
     try {
-      if (isEditing) {
+      if (isEditing && batchToEdit) {
         // En edición: NUNCA se envía ingredientsUsed a updateBatch
         if (creationMode === 'manual') {
           if (isNaN(costManualNum) || costManualNum < 0) {
@@ -330,7 +418,7 @@ export const BatchModal: React.FC<Props> = ({ isOpen, onClose, batchToEdit }) =>
           // Validar renglones
           for (let i = 0; i < recipeItems.length; i++) {
             const item = recipeItems[i];
-            const ing = ingredients.find((ing) => ing.id === item.ingredientId);
+            const ing = safeIngredients.find((ing) => ing.id === item.ingredientId);
             if (!ing) {
               setErrorMsg(`El ingrediente seleccionado en la fila ${i + 1} no es válido.`);
               setSubmitting(false);
@@ -353,7 +441,7 @@ export const BatchModal: React.FC<Props> = ({ isOpen, onClose, batchToEdit }) =>
 
           // Construir ingredientsUsed: envía exclusivamente los datos de la interfaz
           const ingredientsPayload = recipeItems.map((item) => {
-            const ing = ingredients.find((i) => i.id === item.ingredientId)!;
+            const ing = safeIngredients.find((i) => i.id === item.ingredientId)!;
             return {
               ingredientId: item.ingredientId,
               ingredientName: ing.name,
@@ -394,7 +482,7 @@ export const BatchModal: React.FC<Props> = ({ isOpen, onClose, batchToEdit }) =>
 
       onClose();
     } catch (err: any) {
-      setErrorMsg(err.message || 'Error al guardar la tanda.');
+      setErrorMsg(err?.message || 'Error al guardar la tanda.');
     } finally {
       setSubmitting(false);
     }
@@ -445,7 +533,7 @@ export const BatchModal: React.FC<Props> = ({ isOpen, onClose, batchToEdit }) =>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                 <button
                   type="button"
-                  onClick={() => setCreationMode('inventory')}
+                  onClick={() => handleSelectMode('inventory')}
                   className={`p-3 rounded-xl border text-left transition cursor-pointer flex items-start gap-2.5 ${
                     creationMode === 'inventory'
                       ? 'border-[#143d2b] bg-emerald-50/70 shadow-xs ring-1 ring-[#143d2b]'
@@ -473,7 +561,7 @@ export const BatchModal: React.FC<Props> = ({ isOpen, onClose, batchToEdit }) =>
 
                 <button
                   type="button"
-                  onClick={() => setCreationMode('manual')}
+                  onClick={() => handleSelectMode('manual')}
                   className={`p-3 rounded-xl border text-left transition cursor-pointer flex items-start gap-2.5 ${
                     creationMode === 'manual'
                       ? 'border-[#143d2b] bg-emerald-50/70 shadow-xs ring-1 ring-[#143d2b]'
@@ -618,7 +706,7 @@ export const BatchModal: React.FC<Props> = ({ isOpen, onClose, batchToEdit }) =>
                       Ingredientes de la Receta
                     </h3>
                   </div>
-                  {!isEditing && ingredients.length > 0 && (
+                  {!isEditing && safeIngredients.length > 0 && (
                     <button
                       type="button"
                       onClick={handleAddRecipeRow}
@@ -667,7 +755,7 @@ export const BatchModal: React.FC<Props> = ({ isOpen, onClose, batchToEdit }) =>
                       ))}
                     </div>
                   </div>
-                ) : ingredients.length === 0 ? (
+                ) : safeIngredients.length === 0 ? (
                   <div className="p-4 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 text-xs flex items-start gap-2">
                     <AlertCircle className="w-4 h-4 text-amber-700 shrink-0 mt-0.5" />
                     <div>
@@ -681,7 +769,7 @@ export const BatchModal: React.FC<Props> = ({ isOpen, onClose, batchToEdit }) =>
                   /* Constructor de Receta Activo */
                   <div className="space-y-3">
                     {recipeItems.map((item, index) => {
-                      const selectedIng = ingredients.find((i) => i.id === item.ingredientId);
+                      const selectedIng = safeIngredients.find((i) => i.id === item.ingredientId);
                       const compatibleUnits = getCompatibleUnits(selectedIng?.dimension);
                       const previewItem = recipePreview.itemsPreview[index];
 
@@ -701,9 +789,9 @@ export const BatchModal: React.FC<Props> = ({ isOpen, onClose, batchToEdit }) =>
                                 onChange={(e) => handleIngredientChange(item.id, e.target.value)}
                                 className="w-full p-2 bg-white rounded-lg border border-stone-300 text-stone-900 text-xs font-semibold focus:ring-1 focus:ring-[#143d2b]"
                               >
-                                {ingredients.map((ing) => (
+                                {safeIngredients.map((ing) => (
                                   <option key={ing.id} value={ing.id}>
-                                    {ing.name} ({ing.physicalStock} {ing.baseUnit} disp.)
+                                    {ing.name} ({Number(ing.physicalStock) || 0} {ing.baseUnit} disp.)
                                   </option>
                                 ))}
                               </select>
@@ -774,19 +862,19 @@ export const BatchModal: React.FC<Props> = ({ isOpen, onClose, batchToEdit }) =>
                                 <span className="text-stone-500">
                                   Disponible en almacén:{' '}
                                   <strong className="text-stone-800">
-                                    {selectedIng.physicalStock} {selectedIng.baseUnit}
+                                    {Number(selectedIng.physicalStock) || 0} {selectedIng.baseUnit}
                                   </strong>
                                 </span>
                               </div>
 
                               <div>
-                                {previewItem?.status === 'empty' ? (
+                                {!previewItem || previewItem.status === 'empty' ? (
                                   <span className="text-stone-400 italic">Ingresa la cantidad</span>
-                                ) : previewItem?.status === 'full' ? (
+                                ) : previewItem.status === 'full' ? (
                                   <span className="inline-flex items-center gap-1 font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200">
                                     <CheckCircle2 className="w-3 h-3" /> Stock suficiente (Costo est.: {formatMoney(previewItem.cost)})
                                   </span>
-                                ) : previewItem?.status === 'partial' ? (
+                                ) : previewItem.status === 'partial' ? (
                                   <span className="inline-flex items-center gap-1 font-bold text-amber-800 bg-amber-50 px-2 py-0.5 rounded-md border border-amber-200">
                                     <AlertTriangle className="w-3 h-3 text-amber-600" />
                                     Faltan {previewItem.uncoveredBase} {selectedIng.baseUnit} (Costo provisional)
@@ -960,7 +1048,10 @@ export const BatchModal: React.FC<Props> = ({ isOpen, onClose, batchToEdit }) =>
             </button>
             <button
               type="submit"
-              disabled={submitting || (!isEditing && creationMode === 'inventory' && ingredients.length === 0)}
+              disabled={
+                submitting ||
+                (!isEditing && creationMode === 'inventory' && safeIngredients.length === 0)
+              }
               className="px-6 py-2.5 bg-[#143d2b] hover:bg-[#1b4d36] text-white rounded-xl text-xs font-black shadow-md transition flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
             >
               <Check className="w-4 h-4" />
@@ -976,5 +1067,14 @@ export const BatchModal: React.FC<Props> = ({ isOpen, onClose, batchToEdit }) =>
         </form>
       </div>
     </div>
+  );
+};
+
+export const BatchModal: React.FC<Props> = (props) => {
+  if (!props.isOpen) return null;
+  return (
+    <BatchModalErrorBoundary onClose={props.onClose}>
+      <BatchModalContent {...props} />
+    </BatchModalErrorBoundary>
   );
 };
