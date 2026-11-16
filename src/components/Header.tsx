@@ -14,6 +14,7 @@ import {
 import { useAuth } from '../context/AuthContext.tsx';
 import { FirebaseSetupModal } from './FirebaseSetupModal.tsx';
 import { BackupModal } from './BackupModal.tsx';
+import { PWAInstallButton } from './PWAInstallButton.tsx';
 
 interface Props {
   onOpenQuickAction?: (action: string) => void;
@@ -48,8 +49,9 @@ export const Header: React.FC<Props> = () => {
             </div>
           </div>
 
-          {/* Right actions: Firebase status, Backup, Auth */}
+          {/* Right actions: PWA install, Backup, Firebase status, Auth */}
           <div className="flex items-center gap-2 sm:gap-3">
+            <PWAInstallButton />
 
             {/* Backup Button */}
             <button

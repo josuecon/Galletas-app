@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import {
   X,
   Check,
@@ -119,6 +119,7 @@ const BatchModalContent: React.FC<Props> = ({ isOpen, onClose, batchToEdit }) =>
   const [directCosts, setDirectCosts] = useState<DirectCostDraft[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const recipeRowRefs = useRef<Record<string, HTMLDivElement | null>>({});
 
   // Sincronizar e inicializar estado cada vez que el modal se abre o cambia batchToEdit
   useEffect(() => {
@@ -304,15 +305,19 @@ const BatchModalContent: React.FC<Props> = ({ isOpen, onClose, batchToEdit }) =>
   const handleAddRecipeRow = () => {
     if (safeIngredients.length === 0) return;
     const first = safeIngredients[0];
+    const newId = 'item_' + Date.now() + '_' + Math.random().toString(36).substring(2, 5);
     setRecipeItems((prev) => [
       ...prev,
       {
-        id: 'item_' + Date.now() + '_' + Math.random().toString(36).substring(2, 5),
+        id: newId,
         ingredientId: first.id,
         quantity: '',
         unit: getDefaultUnit(first.dimension),
       },
     ]);
+    requestAnimationFrame(() => {
+      recipeRowRefs.current[newId]?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    });
   };
 
   // Eliminar renglón de ingrediente
@@ -489,19 +494,19 @@ const BatchModalContent: React.FC<Props> = ({ isOpen, onClose, batchToEdit }) =>
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-fade-in overflow-y-auto">
-      <div className="bg-[#fbf8f2] text-stone-900 rounded-3xl w-full max-w-2xl shadow-2xl border border-stone-200 overflow-hidden my-6">
-        {/* Header */}
-        <div className="bg-[#143d2b] text-white px-6 py-4 flex items-center justify-between">
-          <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-xl bg-emerald-500/20 text-emerald-300 flex items-center justify-center">
+    <div className="fixed inset-0 z-50 flex items-center justify-center h-dvh pt-[max(0.5rem,env(safe-area-inset-top))] pb-[max(0.5rem,env(safe-area-inset-bottom))] px-2 sm:p-4 bg-black/60 backdrop-blur-xs animate-fade-in overflow-hidden">
+      <div className="bg-[#fbf8f2] text-stone-900 rounded-2xl sm:rounded-3xl w-full max-w-2xl max-h-full shadow-2xl border border-stone-200 flex flex-col overflow-hidden">
+        {/* A. Encabezado fijo */}
+        <div className="shrink-0 bg-[#143d2b] text-white px-4 sm:px-6 py-3.5 sm:py-4 flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <div className="w-8 h-8 rounded-xl bg-emerald-500/20 text-emerald-300 flex items-center justify-center shrink-0">
               <Cookie className="w-5 h-5" />
             </div>
-            <div>
-              <h2 className="text-lg font-black tracking-tight">
+            <div className="min-w-0">
+              <h2 className="text-base sm:text-lg font-black tracking-tight truncate">
                 {isEditing ? 'Editar Tanda de Galletas' : 'Crear Tanda de Producción'}
               </h2>
-              <p className="text-xs text-emerald-200/80">
+              <p className="text-[11px] sm:text-xs text-emerald-200/80 truncate">
                 Horneado, consumo de ingredientes y costo unitario en USD ($)
               </p>
             </div>
@@ -509,14 +514,17 @@ const BatchModalContent: React.FC<Props> = ({ isOpen, onClose, batchToEdit }) =>
           <button
             type="button"
             onClick={onClose}
-            className="p-1.5 text-emerald-200 hover:text-white rounded-lg hover:bg-white/10 transition cursor-pointer"
+            aria-label="Cerrar formulario"
+            className="p-1.5 text-emerald-200 hover:text-white rounded-lg hover:bg-white/10 transition cursor-pointer shrink-0"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
 
-        {/* Form */}
-        <form onSubmit={handleSubmit} className="p-6 space-y-5">
+        {/* Form contenedor flex vertical */}
+        <form onSubmit={handleSubmit} className="flex flex-col flex-1 min-h-0 overflow-hidden">
+          {/* B. Cuerpo desplazable */}
+          <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden overscroll-contain p-4 sm:p-6 space-y-5">
           {errorMsg && (
             <div className="p-3 bg-red-50 border border-red-200 text-red-700 rounded-xl text-xs flex items-center gap-2 font-semibold">
               <AlertCircle className="w-4 h-4 shrink-0" />
@@ -699,7 +707,7 @@ const BatchModalContent: React.FC<Props> = ({ isOpen, onClose, batchToEdit }) =>
             <div className="space-y-4">
               {/* Sección Ingredientes */}
               <div className="p-4 bg-white rounded-2xl border border-stone-200 space-y-3 shadow-2xs">
-                <div className="flex items-center justify-between">
+                <div className="flex flex-wrap items-center justify-between gap-2">
                   <div className="flex items-center gap-2">
                     <Boxes className="w-4 h-4 text-[#143d2b]" />
                     <h3 className="text-xs font-black uppercase tracking-wider text-stone-900">
@@ -776,11 +784,14 @@ const BatchModalContent: React.FC<Props> = ({ isOpen, onClose, batchToEdit }) =>
                       return (
                         <div
                           key={item.id}
+                          ref={(el) => {
+                            recipeRowRefs.current[item.id] = el;
+                          }}
                           className="p-3 bg-stone-50/80 rounded-xl border border-stone-200 space-y-2"
                         >
                           <div className="grid grid-cols-1 sm:grid-cols-12 gap-2 items-center">
                             {/* Selector Ingrediente */}
-                            <div className="sm:col-span-5">
+                            <div className="sm:col-span-5 min-w-0">
                               <label className="block text-[10px] font-bold text-stone-600 uppercase mb-0.5">
                                 Ingrediente #{index + 1}
                               </label>
@@ -897,7 +908,7 @@ const BatchModalContent: React.FC<Props> = ({ isOpen, onClose, batchToEdit }) =>
               {/* Sección Otros Costos Directos (Opcional) */}
               {!isEditing && (
                 <div className="p-4 bg-white rounded-2xl border border-stone-200 space-y-3 shadow-2xs">
-                  <div className="flex items-center justify-between">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
                     <div>
                       <h3 className="text-xs font-black uppercase tracking-wider text-stone-900">
                         Otros Costos Directos (Opcional)
@@ -909,7 +920,7 @@ const BatchModalContent: React.FC<Props> = ({ isOpen, onClose, batchToEdit }) =>
                     <button
                       type="button"
                       onClick={handleAddDirectCost}
-                      className="px-2.5 py-1.5 bg-stone-100 hover:bg-stone-200 text-stone-800 rounded-lg text-xs font-bold transition flex items-center gap-1 cursor-pointer"
+                      className="px-2.5 py-1.5 bg-stone-100 hover:bg-stone-200 text-stone-800 rounded-lg text-xs font-bold transition flex items-center gap-1 cursor-pointer shrink-0"
                     >
                       <Plus className="w-3.5 h-3.5" />
                       Agregar Concepto
@@ -919,15 +930,15 @@ const BatchModalContent: React.FC<Props> = ({ isOpen, onClose, batchToEdit }) =>
                   {directCosts.length > 0 && (
                     <div className="space-y-2">
                       {directCosts.map((dc) => (
-                        <div key={dc.id} className="flex items-center gap-2">
+                        <div key={dc.id} className="flex items-center gap-2 min-w-0">
                           <input
                             type="text"
                             placeholder="Descripción (ej. Bolsas de papel celofán)"
                             value={dc.description}
                             onChange={(e) => handleDirectCostChange(dc.id, 'description', e.target.value)}
-                            className="flex-1 p-2 bg-stone-50 rounded-lg border border-stone-300 text-xs text-stone-900 font-semibold focus:ring-1 focus:ring-[#143d2b]"
+                            className="flex-1 min-w-0 p-2 bg-stone-50 rounded-lg border border-stone-300 text-xs text-stone-900 font-semibold focus:ring-1 focus:ring-[#143d2b]"
                           />
-                          <div className="relative w-28">
+                          <div className="relative w-24 sm:w-28 shrink-0">
                             <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-stone-400 font-bold text-xs">
                               $
                             </span>
@@ -1036,8 +1047,10 @@ const BatchModalContent: React.FC<Props> = ({ isOpen, onClose, batchToEdit }) =>
             />
           </div>
 
-          {/* Botones de acción */}
-          <div className="pt-2 flex items-center justify-end gap-2 border-t border-stone-200">
+          </div>
+
+          {/* C. Pie de acciones fijo y accesible */}
+          <div className="shrink-0 px-4 sm:px-6 py-3 sm:py-4 bg-[#fbf8f2] border-t border-stone-200 flex flex-wrap items-center justify-end gap-2">
             <button
               type="button"
               onClick={onClose}
@@ -1052,9 +1065,9 @@ const BatchModalContent: React.FC<Props> = ({ isOpen, onClose, batchToEdit }) =>
                 submitting ||
                 (!isEditing && creationMode === 'inventory' && safeIngredients.length === 0)
               }
-              className="px-6 py-2.5 bg-[#143d2b] hover:bg-[#1b4d36] text-white rounded-xl text-xs font-black shadow-md transition flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+              className="px-5 sm:px-6 py-2.5 bg-[#143d2b] hover:bg-[#1b4d36] text-white rounded-xl text-xs font-black shadow-md transition flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
             >
-              <Check className="w-4 h-4" />
+              <Check className="w-4 h-4 shrink-0" />
               {submitting
                 ? 'Guardando...'
                 : isEditing

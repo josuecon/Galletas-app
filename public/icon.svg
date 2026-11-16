@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <rect width="512" height="512" rx="112" fill="#143d2b"/>
+  <rect x="40" y="40" width="432" height="432" rx="88" fill="#1a4a35" stroke="#2f6b50" stroke-width="4"/>
+  <!-- Cookie emblem matching app brand (#ede3d1) -->
+  <g transform="translate(96, 96) scale(13.3333)">
+    <path
+      d="M12 2a10 10 0 1 0 10 10 4 4 0 0 1-5-5 4 4 0 0 1-5-5"
+      fill="#ede3d1"
+      stroke="#fbf8f2"
+      stroke-width="1.5"
+      stroke-linecap="round"
+      stroke-linejoin="round"
+    />
+    <circle cx="8.5" cy="8.5" r="1.15" fill="#143d2b"/>
+    <circle cx="16" cy="15.5" r="1.25" fill="#143d2b"/>
+    <circle cx="12" cy="12" r="1.2" fill="#143d2b"/>
+    <circle cx="11" cy="17" r="1.1" fill="#143d2b"/>
+    <circle cx="7" cy="14" r="1.1" fill="#143d2b"/>
+  </g>
+</svg>
