@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { X, Check, ShoppingCart, Calculator, AlertTriangle, AlertCircle } from 'lucide-react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
+import { X, Check, ShoppingCart, AlertTriangle, AlertCircle } from 'lucide-react';
 import { useData } from '../context/DataContext.tsx';
 import { SaleModality, PaymentStatus, Batch } from '../types/index.ts';
 import { getTodayDateString, formatMoney } from '../utils/formatters.ts';
@@ -7,9 +7,16 @@ import { getTodayDateString, formatMoney } from '../utils/formatters.ts';
 interface Props {
   isOpen: boolean;
   onClose: () => void;
+  initialBatchId?: string | null;
 }
 
-export const SaleModal: React.FC<Props> = ({ isOpen, onClose }) => {
+const getBatchAvailableUnits = (batch: Batch): number => {
+  const produced = Number(batch.quantityProduced) || 0;
+  const sold = Number(batch.quantitySold) || 0;
+  return Math.max(0, produced - sold);
+};
+
+export const SaleModal: React.FC<Props> = ({ isOpen, onClose, initialBatchId = null }) => {
   const { batches, addSale } = useData();
 
   const [date, setDate] = useState(getTodayDateString());
@@ -24,25 +31,69 @@ export const SaleModal: React.FC<Props> = ({ isOpen, onClose }) => {
   const [submitting, setSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
-  // Filter available batches
-  const availableBatches = batches.filter((b) => {
-    const available = b.quantityProduced - b.quantitySold;
-    return available > 0;
-  });
+  const wasOpenRef = useRef<boolean>(false);
+  const prevInitialBatchIdRef = useRef<string | null>(initialBatchId);
 
-  // Set initial selected batch if empty
+  // Tandas realmente disponibles para la venta (fuente única)
+  const availableBatches = useMemo(
+    () => batches.filter((b) => getBatchAvailableUnits(b) > 0),
+    [batches]
+  );
+
+  // Sincronización controlada de la selección sin sobrescribir cambios válidos del usuario
   useEffect(() => {
-    if (!selectedBatchId && availableBatches.length > 0) {
+    if (!isOpen) {
+      wasOpenRef.current = false;
+      prevInitialBatchIdRef.current = initialBatchId;
+      setSelectedBatchId('');
+      setErrorMsg(null);
+      setSubmitting(false);
+      return;
+    }
+
+    const justOpened = !wasOpenRef.current;
+    const initialChangedWhileOpen = prevInitialBatchIdRef.current !== initialBatchId;
+    wasOpenRef.current = true;
+    prevInitialBatchIdRef.current = initialBatchId;
+
+    if (availableBatches.length === 0) {
+      if (selectedBatchId !== '') {
+        setSelectedBatchId('');
+      }
+      return;
+    }
+
+    if (justOpened) {
+      setErrorMsg(null);
+    }
+
+    // Al abrir (o si cambia initialBatchId), priorizar initialBatchId si existe y tiene disponibilidad
+    if ((justOpened || initialChangedWhileOpen) && initialBatchId) {
+      const matchingInitial = availableBatches.find((b) => b.id === initialBatchId);
+      if (matchingInitial) {
+        if (selectedBatchId !== matchingInitial.id) {
+          setSelectedBatchId(matchingInitial.id);
+        }
+        return;
+      }
+    }
+
+    // Si la selección actual ya no existe en availableBatches (vacía, agotada o eliminada),
+    // reasignar a la primera tanda disponible; si es válida, conservarla intacta.
+    const currentIsValid = availableBatches.some((b) => b.id === selectedBatchId);
+    if (!currentIsValid) {
       setSelectedBatchId(availableBatches[0].id);
     }
-  }, [availableBatches, selectedBatchId]);
+  }, [isOpen, initialBatchId, availableBatches, selectedBatchId]);
+
+  const currentBatch = useMemo(
+    () => availableBatches.find((b) => b.id === selectedBatchId) ?? null,
+    [availableBatches, selectedBatchId]
+  );
 
   if (!isOpen) return null;
 
-  const currentBatch = batches.find((b) => b.id === selectedBatchId);
-  const availableUnitsInBatch = currentBatch
-    ? Math.max(0, currentBatch.quantityProduced - currentBatch.quantitySold)
-    : 0;
+  const availableUnitsInBatch = currentBatch ? getBatchAvailableUnits(currentBatch) : 0;
 
   const qty = parseInt(quantity, 10) || 0;
   const upp = modality === 'pack' ? parseInt(unitsPerPack, 10) || 1 : 1;
@@ -50,14 +101,14 @@ export const SaleModal: React.FC<Props> = ({ isOpen, onClose }) => {
   const price = parseFloat(salePrice) || 0;
   const totalSaleAmount = Math.round(qty * price * 100) / 100;
 
-  const isExceedingStock = totalUnitsToDeduct > availableUnitsInBatch;
+  const isExceedingStock = currentBatch ? totalUnitsToDeduct > availableUnitsInBatch : false;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMsg(null);
 
-    if (!selectedBatchId) {
-      setErrorMsg('Selecciona una tanda de galletas disponible.');
+    if (!currentBatch || availableUnitsInBatch <= 0) {
+      setErrorMsg('No hay una tanda disponible seleccionada. Hornea una tanda o elige una con existencias.');
       return;
     }
 
@@ -105,8 +156,8 @@ export const SaleModal: React.FC<Props> = ({ isOpen, onClose }) => {
     try {
       await addSale({
         date,
-        batchId: selectedBatchId,
-        batchName: currentBatch?.name || '',
+        batchId: currentBatch.id,
+        batchName: currentBatch.name,
         modality,
         quantity: qty,
         unitsPerPack: upp,
@@ -185,12 +236,16 @@ export const SaleModal: React.FC<Props> = ({ isOpen, onClose }) => {
                 </div>
               ) : (
                 <select
-                  value={selectedBatchId}
-                  onChange={(e) => setSelectedBatchId(e.target.value)}
+                  aria-label="Tanda de Galletas"
+                  value={currentBatch ? currentBatch.id : ''}
+                  onChange={(e) => {
+                    setSelectedBatchId(e.target.value);
+                    setErrorMsg(null);
+                  }}
                   className="w-full p-2.5 bg-white rounded-xl border border-stone-300 text-stone-900 text-sm font-semibold focus:ring-2 focus:ring-[#143d2b]"
                 >
                   {availableBatches.map((b) => {
-                    const avail = b.quantityProduced - b.quantitySold;
+                    const avail = getBatchAvailableUnits(b);
                     return (
                       <option key={b.id} value={b.id}>
                         {b.name} ({avail} disp.)
@@ -311,27 +366,29 @@ export const SaleModal: React.FC<Props> = ({ isOpen, onClose }) => {
           </div>
 
           {/* Validation of stock deduction */}
-          <div
-            className={`p-3 rounded-2xl border text-xs flex items-center justify-between ${
-              isExceedingStock
-                ? 'bg-rose-50 border-rose-300 text-rose-900'
-                : 'bg-emerald-50 border-emerald-200 text-emerald-900'
-            }`}
-          >
-            <div>
-              <span className="font-semibold">Unidades que se descontarán:</span>{' '}
-              <strong className="text-sm">{totalUnitsToDeduct} galletas</strong>
+          {currentBatch && (
+            <div
+              className={`p-3 rounded-2xl border text-xs flex items-center justify-between ${
+                isExceedingStock
+                  ? 'bg-rose-50 border-rose-300 text-rose-900'
+                  : 'bg-emerald-50 border-emerald-200 text-emerald-900'
+              }`}
+            >
+              <div>
+                <span className="font-semibold">Unidades que se descontarán:</span>{' '}
+                <strong className="text-sm">{totalUnitsToDeduct} galletas</strong>
+              </div>
+              {isExceedingStock ? (
+                <span className="font-bold text-rose-600 flex items-center gap-1">
+                  <AlertTriangle className="w-4 h-4" /> ¡Excede disponible ({availableUnitsInBatch})!
+                </span>
+              ) : (
+                <span className="text-emerald-700 font-bold">
+                  Quedarán: {availableUnitsInBatch - totalUnitsToDeduct}
+                </span>
+              )}
             </div>
-            {isExceedingStock ? (
-              <span className="font-bold text-rose-600 flex items-center gap-1">
-                <AlertTriangle className="w-4 h-4" /> ¡Excede disponible ({availableUnitsInBatch})!
-              </span>
-            ) : (
-              <span className="text-emerald-700 font-bold">
-                Quedarán: {availableUnitsInBatch - totalUnitsToDeduct}
-              </span>
-            )}
-          </div>
+          )}
 
           {/* Total Sale Preview Banner */}
           <div className="p-4 rounded-2xl bg-[#143d2b] text-white flex items-center justify-between shadow-xs">
@@ -443,7 +500,7 @@ export const SaleModal: React.FC<Props> = ({ isOpen, onClose }) => {
             </button>
             <button
               type="submit"
-              disabled={submitting || isExceedingStock || availableBatches.length === 0}
+              disabled={submitting || !currentBatch || isExceedingStock || availableBatches.length === 0}
               className="px-6 py-2.5 bg-[#143d2b] hover:bg-[#1b4d36] text-white rounded-xl text-xs font-black shadow-md transition flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
             >
               <Check className="w-4 h-4" />

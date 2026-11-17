@@ -58,6 +58,7 @@ const MainAppContent: React.FC = () => {
   const [showExpenseModal, setShowExpenseModal] = useState(false);
   const [showBatchModal, setShowBatchModal] = useState(false);
   const [showSaleModal, setShowSaleModal] = useState(false);
+  const [selectedSaleBatchId, setSelectedSaleBatchId] = useState<string | null>(null);
   const [showReceivableModal, setShowReceivableModal] = useState(false);
   const [showPayableModal, setShowPayableModal] = useState(false);
   const [showFirebaseModal, setShowFirebaseModal] = useState(false);
@@ -313,7 +314,10 @@ const MainAppContent: React.FC = () => {
             <QuickActions
               onOpenExpense={() => setShowExpenseModal(true)}
               onOpenBatch={() => setShowBatchModal(true)}
-              onOpenSale={() => setShowSaleModal(true)}
+              onOpenSale={() => {
+                setSelectedSaleBatchId(null);
+                setShowSaleModal(true);
+              }}
               onOpenReceivable={() => setShowReceivableModal(true)}
               onOpenPayable={() => setShowPayableModal(true)}
             />
@@ -374,7 +378,10 @@ const MainAppContent: React.FC = () => {
                               </span>
                               <button
                                 type="button"
-                                onClick={() => setShowSaleModal(true)}
+                                onClick={() => {
+                                  setSelectedSaleBatchId(b.id);
+                                  setShowSaleModal(true);
+                                }}
                                 className="px-3 py-1.5 bg-[#143d2b] text-white rounded-xl text-xs font-bold hover:bg-[#1b4d36] cursor-pointer"
                               >
                                 Vender
@@ -408,7 +415,10 @@ const MainAppContent: React.FC = () => {
                     <p className="font-semibold text-stone-700">Aún no se han registrado ventas.</p>
                     <button
                       type="button"
-                      onClick={() => setShowSaleModal(true)}
+                      onClick={() => {
+                        setSelectedSaleBatchId(null);
+                        setShowSaleModal(true);
+                      }}
                       className="mt-3 px-4 py-2 bg-[#143d2b] text-white rounded-xl font-bold cursor-pointer"
                     >
                       Registrar primera venta
@@ -452,7 +462,10 @@ const MainAppContent: React.FC = () => {
 
         {activeTab === 'production' && (
           <ProductionView
-            onSellBatch={() => setShowSaleModal(true)}
+            onSellBatch={(batchId) => {
+              setSelectedSaleBatchId(batchId);
+              setShowSaleModal(true);
+            }}
             onOpenCreateBatch={() => setShowBatchModal(true)}
           />
         )}
@@ -462,7 +475,12 @@ const MainAppContent: React.FC = () => {
         {activeTab === 'inventory' && <InventoryView />}
 
         {activeTab === 'sales' && (
-          <SalesView onOpenCreateSale={() => setShowSaleModal(true)} />
+          <SalesView
+            onOpenCreateSale={() => {
+              setSelectedSaleBatchId(null);
+              setShowSaleModal(true);
+            }}
+          />
         )}
 
         {activeTab === 'expenses' && (
@@ -483,7 +501,14 @@ const MainAppContent: React.FC = () => {
       {/* Global Modals */}
       <ExpenseModal isOpen={showExpenseModal} onClose={() => setShowExpenseModal(false)} />
       <BatchModal isOpen={showBatchModal} onClose={() => setShowBatchModal(false)} />
-      <SaleModal isOpen={showSaleModal} onClose={() => setShowSaleModal(false)} />
+      <SaleModal
+        isOpen={showSaleModal}
+        initialBatchId={selectedSaleBatchId}
+        onClose={() => {
+          setShowSaleModal(false);
+          setSelectedSaleBatchId(null);
+        }}
+      />
       <ReceivableModal isOpen={showReceivableModal} onClose={() => setShowReceivableModal(false)} />
       <PayableModal isOpen={showPayableModal} onClose={() => setShowPayableModal(false)} />
       <FirebaseSetupModal isOpen={showFirebaseModal} onClose={() => setShowFirebaseModal(false)} />
