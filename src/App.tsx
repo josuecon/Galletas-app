@@ -14,6 +14,7 @@ import {
   Sparkles,
   ExternalLink,
   Boxes,
+  BookOpen,
 } from 'lucide-react';
 import { AuthProvider, useAuth } from './context/AuthContext.tsx';
 import { DataProvider, useData } from './context/DataContext.tsx';
@@ -21,6 +22,7 @@ import { Header } from './components/Header.tsx';
 import { FinancialSummary } from './components/FinancialSummary.tsx';
 import { QuickActions } from './components/QuickActions.tsx';
 import { ProductionView } from './components/ProductionView.tsx';
+import { RecipesView } from './components/RecipesView.tsx';
 import { InventoryView } from './components/InventoryView.tsx';
 import { SalesView } from './components/SalesView.tsx';
 import { ExpensesView } from './components/ExpensesView.tsx';
@@ -38,6 +40,7 @@ import { formatMoney } from './utils/formatters.ts';
 type TabType =
   | 'dashboard'
   | 'production'
+  | 'recipes'
   | 'inventory'
   | 'sales'
   | 'expenses'
@@ -209,6 +212,19 @@ const MainAppContent: React.FC = () => {
           >
             <Cookie className="w-4 h-4" />
             Tandas de Galletas
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setActiveTab('recipes')}
+            className={`px-4 py-2.5 rounded-2xl text-xs font-black transition flex items-center gap-2 shrink-0 cursor-pointer ${
+              activeTab === 'recipes'
+                ? 'bg-[#143d2b] text-white shadow-sm'
+                : 'bg-white text-stone-600 hover:text-stone-900 border border-stone-200/70'
+            }`}
+          >
+            <BookOpen className="w-4 h-4" />
+            Recetas
           </button>
 
           <button
@@ -440,6 +456,8 @@ const MainAppContent: React.FC = () => {
             onOpenCreateBatch={() => setShowBatchModal(true)}
           />
         )}
+
+        {activeTab === 'recipes' && <RecipesView />}
 
         {activeTab === 'inventory' && <InventoryView />}
 

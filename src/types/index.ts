@@ -136,6 +136,7 @@ export interface Batch {
   createdAt: string;
 
   // Campos de inventario y recetas
+  recipeId?: string;
   recipeName?: string;
   ingredientsUsed?: BatchIngredientUsage[];
   otherDirectCosts?: BatchDirectCost[];
@@ -145,6 +146,27 @@ export interface Batch {
   stockStatus?: BatchStockStatus;
   isManualCost?: boolean;
   updatedAt?: string;
+}
+
+// Ingrediente de plantilla de receta vinculada al inventario
+export interface RecipeIngredientItem {
+  ingredientId: string;
+  ingredientName: string;
+  quantity: number;
+  unit: UnitOfMeasure;
+}
+
+// Plantilla reutilizable de receta independiente por usuario (sin impacto en inventario)
+export interface Recipe {
+  id: string;
+  userId: string;
+  name: string;
+  description?: string;
+  baseYield: number; // Rendimiento de referencia en unidades de galletas (> 0)
+  ingredients: RecipeIngredientItem[];
+  instructions?: string;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export type SaleModality = 'unit' | 'pack';
@@ -237,6 +259,7 @@ export interface AppBackup {
     payables: Payable[];
     ingredients?: Ingredient[];
     inventoryMovements?: InventoryMovement[];
+    recipes?: Recipe[];
   };
 }
 

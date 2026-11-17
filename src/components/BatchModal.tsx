@@ -11,9 +11,11 @@ import {
   CheckCircle2,
   AlertTriangle,
   Info,
+  BookOpen,
+  RefreshCw,
 } from 'lucide-react';
 import { useData, convertToBaseUnit, isUnitCompatible } from '../context/DataContext.tsx';
-import { Batch, UnitOfMeasure, DimensionType, BatchDirectCost } from '../types/index.ts';
+import { Batch, UnitOfMeasure, DimensionType, BatchDirectCost, Recipe } from '../types/index.ts';
 import { getTodayDateString, formatMoney } from '../utils/formatters.ts';
 
 interface Props {
@@ -27,6 +29,7 @@ interface RecipeItemDraft {
   ingredientId: string;
   quantity: string;
   unit: UnitOfMeasure;
+  missingIngredientName?: string;
 }
 
 interface DirectCostDraft {
@@ -48,6 +51,32 @@ const getDefaultUnit = (dimension?: DimensionType): UnitOfMeasure => {
   if (dimension === 'volumen') return 'ml';
   if (dimension === 'unidad') return 'unidad';
   return 'g';
+};
+
+// Formatea hasta 4 decimales eliminando ceros finales innecesarios
+const formatScaledQuantity = (qty: number): string => {
+  if (!Number.isFinite(qty) || qty <= 0) return '';
+  const rounded = Math.round(qty * 10000) / 10000;
+  return Number(rounded.toFixed(4)).toString();
+};
+
+// Calcula la cantidad escalada directamente desde la plantilla original (sin acumular redondeos)
+const computeScaledQuantity = (
+  originalQty: number,
+  desiredYield: number,
+  baseYield: number
+): string => {
+  if (
+    !Number.isFinite(originalQty) ||
+    originalQty <= 0 ||
+    !Number.isFinite(desiredYield) ||
+    desiredYield <= 0 ||
+    !Number.isFinite(baseYield) ||
+    baseYield <= 0
+  ) {
+    return formatScaledQuantity(originalQty);
+  }
+  return formatScaledQuantity((originalQty * desiredYield) / baseYield);
 };
 
 class BatchModalErrorBoundary extends React.Component<
@@ -104,12 +133,16 @@ class BatchModalErrorBoundary extends React.Component<
 }
 
 const BatchModalContent: React.FC<Props> = ({ isOpen, onClose, batchToEdit }) => {
-  const { addBatch, updateBatch, ingredients } = useData();
+  const { addBatch, updateBatch, ingredients, recipes } = useData();
   const safeIngredients = Array.isArray(ingredients) ? ingredients : [];
+  const safeRecipes = Array.isArray(recipes) ? recipes : [];
 
   const isEditing = !!batchToEdit;
 
   const [creationMode, setCreationMode] = useState<'inventory' | 'manual'>('manual');
+  const [selectedRecipeId, setSelectedRecipeId] = useState<string>('');
+  const [isAutoScaled, setIsAutoScaled] = useState<boolean>(true);
+  const [recipeWarnings, setRecipeWarnings] = useState<string[]>([]);
   const [name, setName] = useState('');
   const [date, setDate] = useState(getTodayDateString());
   const [quantityProduced, setQuantityProduced] = useState<string>('');
@@ -121,11 +154,19 @@ const BatchModalContent: React.FC<Props> = ({ isOpen, onClose, batchToEdit }) =>
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const recipeRowRefs = useRef<Record<string, HTMLDivElement | null>>({});
 
+  const selectedRecipe = useMemo(
+    () => safeRecipes.find((r) => r.id === selectedRecipeId) || null,
+    [safeRecipes, selectedRecipeId]
+  );
+
   // Sincronizar e inicializar estado cada vez que el modal se abre o cambia batchToEdit
   useEffect(() => {
     if (!isOpen) return;
     setErrorMsg(null);
     setSubmitting(false);
+    setSelectedRecipeId('');
+    setIsAutoScaled(true);
+    setRecipeWarnings([]);
 
     if (batchToEdit) {
       const hasRecipe =
@@ -179,7 +220,7 @@ const BatchModalContent: React.FC<Props> = ({ isOpen, onClose, batchToEdit }) =>
       const qtyNum = parseFloat(item.quantity);
       const validQty = Number.isFinite(qtyNum) && qtyNum > 0 ? qtyNum : 0;
 
-      if (!ing || validQty <= 0) {
+      if (!ing || validQty <= 0 || !isUnitCompatible(item.unit, ing.dimension)) {
         return {
           ...item,
           ing,
@@ -192,10 +233,7 @@ const BatchModalContent: React.FC<Props> = ({ isOpen, onClose, batchToEdit }) =>
         };
       }
 
-      const unitToConvert = isUnitCompatible(item.unit, ing.dimension)
-        ? item.unit
-        : getDefaultUnit(ing.dimension);
-      const reqBase = convertToBaseUnit(validQty, unitToConvert);
+      const reqBase = convertToBaseUnit(validQty, item.unit);
       const availStock = Math.max(0, Number(ing.physicalStock) || 0);
       const coveredBase = Math.min(reqBase, availStock);
       const uncoveredBase = Math.max(0, Math.round((reqBase - coveredBase) * 10000) / 10000);
@@ -269,8 +307,123 @@ const BatchModalContent: React.FC<Props> = ({ isOpen, onClose, batchToEdit }) =>
     }
   };
 
+  // Construye renglones escalados directamente desde una plantilla de receta
+  const buildScaledRowsFromRecipe = (
+    recipe: Recipe,
+    targetYield: number
+  ): { drafts: RecipeItemDraft[]; warnings: string[] } => {
+    const warnings: string[] = [];
+    const drafts: RecipeItemDraft[] = (recipe.ingredients || []).map((origItem, idx) => {
+      const ing = safeIngredients.find((i) => i.id === origItem.ingredientId);
+      const scaledQty = computeScaledQuantity(
+        origItem.quantity,
+        targetYield,
+        recipe.baseYield
+      );
+
+      if (!ing) {
+        warnings.push(
+          `El ingrediente «${origItem.ingredientName}» ya no existe en el inventario. Selecciónalo manualmente o quita esa fila.`
+        );
+        return {
+          id: `item_${recipe.id}_${idx}`,
+          ingredientId: origItem.ingredientId,
+          missingIngredientName: origItem.ingredientName,
+          quantity: scaledQty,
+          unit: origItem.unit,
+        };
+      }
+
+      if (!isUnitCompatible(origItem.unit, ing.dimension)) {
+        warnings.push(
+          `La unidad «${origItem.unit}» de «${ing.name}» no es compatible con su dimensión (${ing.dimension}).`
+        );
+      }
+
+      return {
+        id: `item_${recipe.id}_${idx}`,
+        ingredientId: ing.id,
+        quantity: scaledQty,
+        unit: origItem.unit,
+      };
+    });
+
+    return { drafts, warnings };
+  };
+
+  // Selección de receta guardada o retorno a "Desde cero"
+  const handleSelectRecipe = (nextRecipeId: string) => {
+    setErrorMsg(null);
+
+    if (!nextRecipeId) {
+      setSelectedRecipeId('');
+      setIsAutoScaled(true);
+      setRecipeWarnings([]);
+      setName('');
+      setQuantityProduced('');
+      if (safeIngredients.length > 0) {
+        const first = safeIngredients[0];
+        setRecipeItems([
+          {
+            id: 'item_' + Date.now(),
+            ingredientId: first.id,
+            quantity: '',
+            unit: getDefaultUnit(first.dimension),
+          },
+        ]);
+      } else {
+        setRecipeItems([]);
+      }
+      return;
+    }
+
+    const recipe = safeRecipes.find((r) => r.id === nextRecipeId);
+    if (!recipe) return;
+
+    setSelectedRecipeId(recipe.id);
+    setIsAutoScaled(true);
+    setName(recipe.name);
+    setQuantityProduced(String(recipe.baseYield));
+
+    const { drafts, warnings } = buildScaledRowsFromRecipe(recipe, recipe.baseYield);
+    setRecipeItems(drafts);
+    setRecipeWarnings(warnings);
+  };
+
+  // Cambio de cantidad producida (reescala si hay receta activa con autoescalado)
+  const handleQuantityProducedChange = (nextVal: string) => {
+    setQuantityProduced(nextVal);
+
+    if (!isEditing && creationMode === 'inventory' && selectedRecipe && isAutoScaled) {
+      const trimmed = nextVal.trim();
+      const parsed = Number(trimmed);
+      if (trimmed !== '' && Number.isFinite(parsed) && parsed > 0) {
+        const { drafts, warnings } = buildScaledRowsFromRecipe(selectedRecipe, parsed);
+        setRecipeItems(drafts);
+        setRecipeWarnings(warnings);
+      }
+    }
+  };
+
+  // Recalcular explícitamente desde la receta original según rendimiento actual
+  const handleRecalculateFromRecipe = () => {
+    if (!selectedRecipe) return;
+    const trimmed = quantityProduced.trim();
+    const parsed = Number(trimmed);
+    if (trimmed === '' || !Number.isFinite(parsed) || parsed <= 0) {
+      setErrorMsg('Ingresa un rendimiento mayor a cero para recalcular las cantidades de la receta.');
+      return;
+    }
+    setErrorMsg(null);
+    setIsAutoScaled(true);
+    const { drafts, warnings } = buildScaledRowsFromRecipe(selectedRecipe, parsed);
+    setRecipeItems(drafts);
+    setRecipeWarnings(warnings);
+  };
+
   // Manejo de cambio de ingrediente en un renglón
   const handleIngredientChange = (rowId: string, newIngredientId: string) => {
+    if (selectedRecipeId && isAutoScaled) setIsAutoScaled(false);
     const selectedIng = safeIngredients.find((i) => i.id === newIngredientId);
     setRecipeItems((prev) =>
       prev.map((row) => {
@@ -281,6 +434,7 @@ const BatchModalContent: React.FC<Props> = ({ isOpen, onClose, batchToEdit }) =>
         return {
           ...row,
           ingredientId: newIngredientId,
+          missingIngredientName: undefined,
           unit: nextUnit,
         };
       })
@@ -289,6 +443,7 @@ const BatchModalContent: React.FC<Props> = ({ isOpen, onClose, batchToEdit }) =>
 
   // Manejo de cambio de cantidad
   const handleQuantityChange = (rowId: string, qty: string) => {
+    if (selectedRecipeId && isAutoScaled) setIsAutoScaled(false);
     setRecipeItems((prev) =>
       prev.map((row) => (row.id === rowId ? { ...row, quantity: qty } : row))
     );
@@ -296,6 +451,7 @@ const BatchModalContent: React.FC<Props> = ({ isOpen, onClose, batchToEdit }) =>
 
   // Manejo de cambio de unidad
   const handleUnitChange = (rowId: string, unit: UnitOfMeasure) => {
+    if (selectedRecipeId && isAutoScaled) setIsAutoScaled(false);
     setRecipeItems((prev) =>
       prev.map((row) => (row.id === rowId ? { ...row, unit } : row))
     );
@@ -304,6 +460,7 @@ const BatchModalContent: React.FC<Props> = ({ isOpen, onClose, batchToEdit }) =>
   // Agregar renglón de ingrediente
   const handleAddRecipeRow = () => {
     if (safeIngredients.length === 0) return;
+    if (selectedRecipeId && isAutoScaled) setIsAutoScaled(false);
     const first = safeIngredients[0];
     const newId = 'item_' + Date.now() + '_' + Math.random().toString(36).substring(2, 5);
     setRecipeItems((prev) => [
@@ -322,6 +479,7 @@ const BatchModalContent: React.FC<Props> = ({ isOpen, onClose, batchToEdit }) =>
 
   // Eliminar renglón de ingrediente
   const handleRemoveRecipeRow = (rowId: string) => {
+    if (selectedRecipeId && isAutoScaled) setIsAutoScaled(false);
     setRecipeItems((prev) => prev.filter((row) => row.id !== rowId));
   };
 
@@ -425,7 +583,9 @@ const BatchModalContent: React.FC<Props> = ({ isOpen, onClose, batchToEdit }) =>
             const item = recipeItems[i];
             const ing = safeIngredients.find((ing) => ing.id === item.ingredientId);
             if (!ing) {
-              setErrorMsg(`El ingrediente seleccionado en la fila ${i + 1} no es válido.`);
+              setErrorMsg(
+                `El ingrediente "${item.missingIngredientName || `fila ${i + 1}`}" no existe en el inventario actual. Selecciónalo nuevamente o quita esa fila.`
+              );
               setSubmitting(false);
               return;
             }
@@ -473,11 +633,13 @@ const BatchModalContent: React.FC<Props> = ({ isOpen, onClose, batchToEdit }) =>
             }
           }
 
-          // Enviar al motor addBatch (sin totalCost manual)
+          // Enviar al motor addBatch (sin totalCost manual; recipeId/recipeName solo como trazabilidad)
           await addBatch({
             name: name.trim(),
             date,
             quantityProduced: qtyNum,
+            recipeId: selectedRecipe ? selectedRecipe.id : undefined,
+            recipeName: selectedRecipe ? selectedRecipe.name : undefined,
             ingredientsUsed: ingredientsPayload as any,
             otherDirectCosts: validDirectCosts.length > 0 ? validDirectCosts : undefined,
             observations: observations.trim() || undefined,
@@ -609,6 +771,86 @@ const BatchModalContent: React.FC<Props> = ({ isOpen, onClose, batchToEdit }) =>
             </div>
           )}
 
+          {/* Selector de Receta Guardada (solo en creación con inventario) */}
+          {!isEditing && creationMode === 'inventory' && (
+            <div className="p-3.5 bg-white rounded-2xl border border-stone-200 space-y-2.5">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <label className="text-xs font-black text-stone-800 uppercase tracking-wider flex items-center gap-1.5">
+                  <BookOpen className="w-4 h-4 text-[#143d2b]" />
+                  Cargar desde Receta (Opcional)
+                </label>
+                {selectedRecipe && (
+                  <span className="text-[11px] font-bold text-stone-500">
+                    Rendimiento base: {selectedRecipe.baseYield} galletas
+                  </span>
+                )}
+              </div>
+
+              <select
+                value={selectedRecipeId}
+                onChange={(e) => handleSelectRecipe(e.target.value)}
+                aria-label="Seleccionar receta guardada"
+                className="w-full p-2.5 bg-[#fbf8f2] rounded-xl border border-stone-300 text-stone-900 text-xs font-bold focus:ring-2 focus:ring-[#143d2b] focus:outline-hidden"
+              >
+                <option value="">Desde cero</option>
+                {safeRecipes.map((recipe) => (
+                  <option key={recipe.id} value={recipe.id}>
+                    {recipe.name} (rinde {recipe.baseYield} galletas)
+                  </option>
+                ))}
+              </select>
+
+              {selectedRecipe && (
+                <div className="flex flex-wrap items-center justify-between gap-2 pt-1 text-[11px]">
+                  {isAutoScaled ? (
+                    <>
+                      <span className="text-emerald-800 font-semibold flex items-center gap-1">
+                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                        Escalado proporcional activo al cambiar la cantidad producida.
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => setIsAutoScaled(false)}
+                        className="px-2.5 py-1 bg-stone-100 hover:bg-stone-200 text-stone-700 rounded-lg font-bold transition cursor-pointer shrink-0"
+                      >
+                        Desvincular autoescalado
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      <span className="text-amber-800 font-semibold flex items-center gap-1">
+                        <AlertTriangle className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+                        Ajuste manual activo (no se sobrescribirá automáticamente).
+                      </span>
+                      <button
+                        type="button"
+                        onClick={handleRecalculateFromRecipe}
+                        className="px-2.5 py-1 bg-emerald-50 hover:bg-emerald-100 text-[#143d2b] border border-emerald-200 rounded-lg font-bold transition flex items-center gap-1 cursor-pointer shrink-0"
+                      >
+                        <RefreshCw className="w-3 h-3" />
+                        Recalcular según rendimiento
+                      </button>
+                    </>
+                  )}
+                </div>
+              )}
+
+              {recipeWarnings.length > 0 && (
+                <div className="p-2.5 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 text-xs space-y-1">
+                  <div className="font-bold flex items-center gap-1.5">
+                    <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
+                    <span>Revisa los ingredientes de esta receta antes de confirmar:</span>
+                  </div>
+                  <ul className="list-disc pl-5 text-[11px] space-y-0.5">
+                    {recipeWarnings.map((w, idx) => (
+                      <li key={idx}>{w}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </div>
+          )}
+
           {/* Datos Generales */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div className="sm:col-span-2">
@@ -649,7 +891,7 @@ const BatchModalContent: React.FC<Props> = ({ isOpen, onClose, batchToEdit }) =>
                 required
                 disabled={hasSales}
                 value={quantityProduced}
-                onChange={(e) => setQuantityProduced(e.target.value)}
+                onChange={(e) => handleQuantityProducedChange(e.target.value)}
                 placeholder="Ej. 60"
                 className={`w-full p-2.5 rounded-xl border text-stone-900 text-sm font-bold focus:ring-2 focus:ring-[#143d2b] ${
                   hasSales
@@ -779,6 +1021,9 @@ const BatchModalContent: React.FC<Props> = ({ isOpen, onClose, batchToEdit }) =>
                     {recipeItems.map((item, index) => {
                       const selectedIng = safeIngredients.find((i) => i.id === item.ingredientId);
                       const compatibleUnits = getCompatibleUnits(selectedIng?.dimension);
+                      const unitIncompatible = Boolean(
+                        selectedIng && !isUnitCompatible(item.unit, selectedIng.dimension)
+                      );
                       const previewItem = recipePreview.itemsPreview[index];
 
                       return (
@@ -787,7 +1032,11 @@ const BatchModalContent: React.FC<Props> = ({ isOpen, onClose, batchToEdit }) =>
                           ref={(el) => {
                             recipeRowRefs.current[item.id] = el;
                           }}
-                          className="p-3 bg-stone-50/80 rounded-xl border border-stone-200 space-y-2"
+                          className={`p-3 rounded-xl border space-y-2 ${
+                            !selectedIng || unitIncompatible
+                              ? 'bg-rose-50/70 border-rose-300'
+                              : 'bg-stone-50/80 border-stone-200'
+                          }`}
                         >
                           <div className="grid grid-cols-1 sm:grid-cols-12 gap-2 items-center">
                             {/* Selector Ingrediente */}
@@ -800,6 +1049,11 @@ const BatchModalContent: React.FC<Props> = ({ isOpen, onClose, batchToEdit }) =>
                                 onChange={(e) => handleIngredientChange(item.id, e.target.value)}
                                 className="w-full p-2 bg-white rounded-lg border border-stone-300 text-stone-900 text-xs font-semibold focus:ring-1 focus:ring-[#143d2b]"
                               >
+                                {!selectedIng && item.ingredientId && (
+                                  <option value={item.ingredientId}>
+                                    {item.missingIngredientName || item.ingredientId} (no existe en inventario)
+                                  </option>
+                                )}
                                 {safeIngredients.map((ing) => (
                                   <option key={ing.id} value={ing.id}>
                                     {ing.name} ({Number(ing.physicalStock) || 0} {ing.baseUnit} disp.)
@@ -835,6 +1089,11 @@ const BatchModalContent: React.FC<Props> = ({ isOpen, onClose, batchToEdit }) =>
                                 onChange={(e) => handleUnitChange(item.id, e.target.value as UnitOfMeasure)}
                                 className="w-full p-2 bg-white rounded-lg border border-stone-300 text-stone-900 text-xs font-semibold focus:ring-1 focus:ring-[#143d2b]"
                               >
+                                {unitIncompatible && (
+                                  <option value={item.unit}>
+                                    {item.unit} (incompatible)
+                                  </option>
+                                )}
                                 {compatibleUnits.map((u) => (
                                   <option key={u} value={u}>
                                     {u === 'kg'
@@ -866,8 +1125,27 @@ const BatchModalContent: React.FC<Props> = ({ isOpen, onClose, batchToEdit }) =>
                             </div>
                           </div>
 
+                          {/* Advertencia si el ingrediente fue eliminado o tiene unidad incompatible */}
+                          {!selectedIng && item.ingredientId && (
+                            <div className="text-[11px] font-semibold text-rose-700 flex items-center gap-1.5 pt-1 border-t border-rose-200">
+                              <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+                              <span>
+                                Este ingrediente ya no existe en el inventario. Selecciona un insumo válido o elimina esta fila.
+                              </span>
+                            </div>
+                          )}
+
+                          {selectedIng && unitIncompatible && (
+                            <div className="text-[11px] font-semibold text-rose-700 flex items-center gap-1.5 pt-1 border-t border-rose-200">
+                              <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+                              <span>
+                                La unidad «{item.unit}» no es compatible con la dimensión {selectedIng.dimension} de {selectedIng.name}. Selecciona una unidad válida.
+                              </span>
+                            </div>
+                          )}
+
                           {/* Indicador reactivo de disponibilidad física */}
-                          {selectedIng && (
+                          {selectedIng && !unitIncompatible && (
                             <div className="pt-1 flex flex-wrap items-center justify-between gap-2 text-[11px] border-t border-stone-200/60">
                               <div className="flex items-center gap-1.5">
                                 <span className="text-stone-500">

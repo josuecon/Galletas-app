@@ -25,6 +25,8 @@ import {
   FinancialSummary,
   AppBackup,
   PaymentInstallment,
+  Recipe,
+  RecipeIngredientItem,
 } from '../types/index.ts';
 import { handleFirestoreError, OperationType } from '../services/firebase.ts';
 import { sanitizeForFirestore } from '../utils/sanitize.ts';
@@ -65,6 +67,7 @@ interface DataContextType {
   payables: Payable[];
   ingredients: Ingredient[];
   inventoryMovements: InventoryMovement[];
+  recipes: Recipe[];
   loadingData: boolean;
   // Calculations
   financialSummary: FinancialSummary;
@@ -72,6 +75,10 @@ interface DataContextType {
   addIngredient: (data: Omit<Ingredient, 'id' | 'userId' | 'createdAt' | 'updatedAt' | 'physicalStock' | 'averageCost' | 'totalValue'>) => Promise<string>;
   updateIngredient: (id: string, updates: Partial<Pick<Ingredient, 'name' | 'category' | 'minStockAlert'>>) => Promise<void>;
   deleteIngredient: (id: string) => Promise<void>;
+  // CRUD Recipes
+  addRecipe: (data: Omit<Recipe, 'id' | 'userId' | 'createdAt' | 'updatedAt'>) => Promise<string>;
+  updateRecipe: (id: string, updates: Partial<Omit<Recipe, 'id' | 'userId' | 'createdAt' | 'updatedAt'>>) => Promise<void>;
+  deleteRecipe: (id: string) => Promise<void>;
   // CRUD Expenses & Inventory Purchases
   addExpense: (expense: Omit<Expense, 'id' | 'userId' | 'createdAt'>) => Promise<string>;
   updateExpense: (id: string, updates: Partial<Expense>) => Promise<void>;
@@ -117,6 +124,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [payables, setPayables] = useState<Payable[]>([]);
   const [ingredients, setIngredients] = useState<Ingredient[]>([]);
   const [inventoryMovements, setInventoryMovements] = useState<InventoryMovement[]>([]);
+  const [recipes, setRecipes] = useState<Recipe[]>([]);
   const [loadingData, setLoadingData] = useState<boolean>(true);
 
   // Real-time Firestore Listeners
@@ -129,6 +137,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setPayables([]);
       setIngredients([]);
       setInventoryMovements([]);
+      setRecipes([]);
       setLoadingData(false);
       return;
     }
@@ -143,11 +152,12 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const payablesPath = `users/${uid}/payables`;
     const ingredientsPath = `users/${uid}/ingredients`;
     const inventoryMovementsPath = `users/${uid}/inventoryMovements`;
+    const recipesPath = `users/${uid}/recipes`;
 
     let loadedCount = 0;
     const checkLoaded = () => {
       loadedCount++;
-      if (loadedCount >= 7) {
+      if (loadedCount >= 8) {
         setLoadingData(false);
       }
     };
@@ -243,6 +253,25 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
     );
 
+    const unsubRecipes = onSnapshot(
+      query(collection(dbInstance, recipesPath)),
+      (snapshot) => {
+        const items = snapshot.docs.map((docSnap) => ({ id: docSnap.id, ...docSnap.data() } as Recipe));
+        items.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+        setRecipes(items);
+        checkLoaded();
+      },
+      (error) => {
+        if ((error as any)?.code === 'permission-denied') {
+          console.warn('Permiso denegado al consultar recetas (regla firestore.rules pendiente).');
+          setRecipes([]);
+          checkLoaded();
+          return;
+        }
+        handleFirestoreError(error, OperationType.GET, recipesPath);
+      }
+    );
+
     return () => {
       unsubExpenses();
       unsubBatches();
@@ -251,6 +280,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       unsubPayables();
       unsubIngredients();
       unsubInventoryMovements();
+      unsubRecipes();
     };
   }, [user, dbInstance]);
 
@@ -390,6 +420,151 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const inExpenses = expenses.some((e) => e.ingredientId === id);
       if (inExpenses) {
         throw new Error('No se puede eliminar este ingrediente porque está vinculado a compras de insumos.');
+      }
+      const inRecipes = recipes.some((r) =>
+        (r.ingredients || []).some((item) => item.ingredientId === id)
+      );
+      if (inRecipes) {
+        throw new Error('No se puede eliminar este ingrediente porque está vinculado a una o más recetas.');
+      }
+
+      await deleteDoc(doc(dbInstance, path, id));
+    } catch (err) {
+      handleFirestoreError(err, OperationType.DELETE, path);
+    }
+  };
+
+  // CRUD RECIPES (Plantillas independientes por UID; no afectan existencias ni costos)
+  const validateAndNormalizeRecipeIngredients = (
+    items: RecipeIngredientItem[]
+  ): RecipeIngredientItem[] => {
+    if (!Array.isArray(items) || items.length === 0) {
+      throw new Error('La receta debe incluir al menos un ingrediente.');
+    }
+
+    return items.map((item, idx) => {
+      if (!item || typeof item.ingredientId !== 'string' || item.ingredientId.trim() === '') {
+        throw new Error(`El ingrediente en la posición ${idx + 1} no es válido.`);
+      }
+      const catalogIng = ingredients.find((ing) => ing.id === item.ingredientId);
+      if (!catalogIng) {
+        throw new Error(
+          `El ingrediente "${item.ingredientName || item.ingredientId}" no existe en el catálogo de inventario.`
+        );
+      }
+      if (typeof item.quantity !== 'number' || !Number.isFinite(item.quantity) || item.quantity <= 0) {
+        throw new Error(`La cantidad para "${catalogIng.name}" debe ser un número mayor a cero.`);
+      }
+      if (!isUnitCompatible(item.unit, catalogIng.dimension)) {
+        throw new Error(
+          `La unidad "${item.unit}" no es compatible con la dimensión ${catalogIng.dimension} de ${catalogIng.name}.`
+        );
+      }
+
+      return {
+        ingredientId: catalogIng.id,
+        ingredientName: catalogIng.name,
+        quantity: Math.round(item.quantity * 10000) / 10000,
+        unit: item.unit,
+      };
+    });
+  };
+
+  const addRecipe = async (
+    data: Omit<Recipe, 'id' | 'userId' | 'createdAt' | 'updatedAt'>
+  ): Promise<string> => {
+    if (!user || !dbInstance) throw new Error('No autenticado');
+    const path = `users/${user.uid}/recipes`;
+    try {
+      if (!data.name || data.name.trim() === '') {
+        throw new Error('El nombre de la receta es obligatorio.');
+      }
+      if (
+        typeof data.baseYield !== 'number' ||
+        !Number.isFinite(data.baseYield) ||
+        !Number.isInteger(data.baseYield) ||
+        data.baseYield <= 0
+      ) {
+        throw new Error('El rendimiento de referencia debe ser un número entero mayor a cero.');
+      }
+
+      const normalizedIngredients = validateAndNormalizeRecipeIngredients(data.ingredients);
+      const now = new Date().toISOString();
+      const id = 'recp_' + Date.now() + '_' + Math.random().toString(36).substring(2, 7);
+
+      const newRecipe: Recipe = {
+        id,
+        userId: user.uid,
+        name: data.name.trim(),
+        description: data.description?.trim() || undefined,
+        baseYield: data.baseYield,
+        ingredients: normalizedIngredients,
+        instructions: data.instructions?.trim() || undefined,
+        createdAt: now,
+        updatedAt: now,
+      };
+
+      await setDoc(doc(dbInstance, path, id), sanitizeForFirestore(newRecipe));
+      return id;
+    } catch (err) {
+      handleFirestoreError(err, OperationType.WRITE, path);
+    }
+  };
+
+  const updateRecipe = async (
+    id: string,
+    updates: Partial<Omit<Recipe, 'id' | 'userId' | 'createdAt' | 'updatedAt'>>
+  ): Promise<void> => {
+    if (!user || !dbInstance) throw new Error('No autenticado');
+    const path = `users/${user.uid}/recipes`;
+    try {
+      const current = recipes.find((r) => r.id === id);
+      if (!current) throw new Error('Receta no encontrada.');
+      if (current.userId && current.userId !== user.uid) {
+        throw new Error('No autorizado para modificar esta receta.');
+      }
+
+      if (updates.name !== undefined && updates.name.trim() === '') {
+        throw new Error('El nombre de la receta no puede estar vacío.');
+      }
+      if (
+        updates.baseYield !== undefined &&
+        (typeof updates.baseYield !== 'number' ||
+          !Number.isFinite(updates.baseYield) ||
+          !Number.isInteger(updates.baseYield) ||
+          updates.baseYield <= 0)
+      ) {
+        throw new Error('El rendimiento de referencia debe ser un número entero mayor a cero.');
+      }
+
+      const normalizedIngredients =
+        updates.ingredients !== undefined
+          ? validateAndNormalizeRecipeIngredients(updates.ingredients)
+          : undefined;
+
+      const cleanUpdates = sanitizeForFirestore({
+        name: updates.name !== undefined ? updates.name.trim() : undefined,
+        description: updates.description !== undefined ? updates.description.trim() : undefined,
+        baseYield: updates.baseYield,
+        ingredients: normalizedIngredients,
+        instructions: updates.instructions !== undefined ? updates.instructions.trim() : undefined,
+        updatedAt: new Date().toISOString(),
+      });
+
+      await updateDoc(doc(dbInstance, path, id), cleanUpdates);
+    } catch (err) {
+      handleFirestoreError(err, OperationType.UPDATE, path);
+    }
+  };
+
+  const deleteRecipe = async (id: string): Promise<void> => {
+    if (!user || !dbInstance) throw new Error('No autenticado');
+    const path = `users/${user.uid}/recipes`;
+    try {
+      const target = recipes.find((r) => r.id === id);
+      if (!target) return;
+      if (target.userId && target.userId !== user.uid) {
+        throw new Error('No autorizado para eliminar esta receta.');
       }
 
       await deleteDoc(doc(dbInstance, path, id));
@@ -1527,6 +1702,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         payables,
         ingredients,
         inventoryMovements,
+        recipes,
       },
     };
   };
@@ -1555,11 +1731,13 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         payables: impPayables = [],
         ingredients: impIngredients = [],
         inventoryMovements: impInventoryMovements = [],
+        recipes: impRecipes = [],
       } = backup.data;
 
       const collectionsToCheck = [
         { name: 'ingredientes', key: 'ingredients', items: impIngredients },
         { name: 'movimientos de inventario', key: 'inventoryMovements', items: impInventoryMovements },
+        { name: 'recetas', key: 'recipes', items: impRecipes },
         { name: 'tandas', key: 'batches', items: impBatches },
         { name: 'gastos', key: 'expenses', items: impExpenses },
         { name: 'ventas', key: 'sales', items: impSales },
@@ -1723,6 +1901,47 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
             count: 0,
             error: `Error de integridad referencial: La cuenta por pagar "${pay.id}" referencia un gasto inexistente ("${targetExpId}").`,
           };
+        }
+      }
+
+      // 9. Validación referencial y estructural: Recetas -> Ingredientes
+      for (const recipe of impRecipes) {
+        if (!recipe.name || typeof recipe.name !== 'string' || recipe.name.trim() === '') {
+          return {
+            success: false,
+            count: 0,
+            error: `La receta "${recipe.id}" en el respaldo no tiene un nombre válido.`,
+          };
+        }
+        if (
+          typeof recipe.baseYield !== 'number' ||
+          !Number.isFinite(recipe.baseYield) ||
+          recipe.baseYield <= 0
+        ) {
+          return {
+            success: false,
+            count: 0,
+            error: `La receta "${recipe.name}" en el respaldo tiene un rendimiento de referencia inválido.`,
+          };
+        }
+        if (!Array.isArray(recipe.ingredients) || recipe.ingredients.length === 0) {
+          return {
+            success: false,
+            count: 0,
+            error: `La receta "${recipe.name}" en el respaldo no contiene ingredientes válidos.`,
+          };
+        }
+        for (const item of recipe.ingredients) {
+          if (
+            !item.ingredientId ||
+            (impIngredients.length > 0 && !ingredientIdSet.has(item.ingredientId))
+          ) {
+            return {
+              success: false,
+              count: 0,
+              error: `Error de integridad referencial: La receta "${recipe.id}" referencia un ingrediente inexistente ("${item.ingredientId}").`,
+            };
+          }
         }
       }
 
@@ -1896,6 +2115,18 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         });
       }
 
+      // H. Recetas
+      for (const item of impRecipes) {
+        operations.push({
+          ref: doc(dbInstance, `users/${user.uid}/recipes`, item.id),
+          data: sanitizeForFirestore({
+            ...item,
+            id: item.id,
+            userId: user.uid,
+          }),
+        });
+      }
+
       const totalDocs = operations.length;
       if (totalDocs === 0) {
         return { success: true, count: 0 };
@@ -1943,11 +2174,15 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     payables,
     ingredients,
     inventoryMovements,
+    recipes,
     loadingData,
     financialSummary,
     addIngredient,
     updateIngredient,
     deleteIngredient,
+    addRecipe,
+    updateRecipe,
+    deleteRecipe,
     addExpense,
     updateExpense,
     deleteExpense,
